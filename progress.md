@@ -6,17 +6,19 @@
 - [x] Browser Fingerprinting for Anti-Sybil protection.
 - [x] Starknet Sepolia integration via `@starknet-io/get-starknet`.
 - [x] Cairo 2.8.0 Smart Contract (`SBlake`) compiled successfully.
-- [x] Brother ID integration in mining logic.
-- [x] PWA support with custom icons.
-- [x] Deployment automation scripts (`scripts/deploy.js`, `scripts/browser_deploy.js`).
+- [x] Browser-based deployment script (`scripts/browser_deploy.js`) verified.
+- [x] PWA support and project structure finalized.
+- [x] Repository synchronized with GitHub (`fearmexxx/blake`).
 
-## ⏳ Pending
-- [ ] On-chain deployment to Starknet Sepolia.
-- [ ] Integration of real contract address in `src/utils/starknet.ts`.
-- [ ] Verification of Brother ID bonus logic on-chain.
-- [ ] Final performance tuning for hashing throughput.
+## ⏳ Pending / Issues
+- [ ] **On-chain Deployment**: Contract class is declared but not yet deployed to Sepolia.
+- [ ] **Live Integration**: `src/utils/starknet.ts` still uses mock data and placeholder addresses.
+- [ ] **Verification**: Brother ID bonus logic needs live on-chain testing.
+- [ ] **Environment Migration**: Move to WSL Ubuntu for local production testing.
 
-## 🚀 Next Steps
-1. Deploy contract via browser console helper (`scripts/browser_deploy.js`).
-2. Update `CONTRACT_ADDRESS` in `src/utils/starknet.ts`.
-3. Launch genesis sale and open the mining client to testers.
+## 🚀 Next Steps (Priority)
+1. **Deploy SBlake Contract**: Execute deployment via browser console script.
+2. **Configure Frontend**: Update `CONTRACT_ADDRESS` and implement real RPC calls in `src/utils/starknet.ts`.
+3. **End-to-End Test**: Perform a full mining cycle (Hash -> Submit -> Mint) on Sepolia.
+4. **Final Polish**: Performance tuning for multi-threaded hashing throughput.
+
