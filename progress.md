@@ -10,24 +10,25 @@
 
 | Component | Status | Details |
 | :--- | :---: | :--- |
-| **Frontend UI** | ✅ Complete | Matrix-industrial theme, responsive layout, Framer Motion animations, PWA setup |
-| **PoW Mining Engine** | ✅ Complete | Multi-threaded Web Workers with `@noble/hashes/blake2s`, dynamic nonce batching |
-| **Anti-Sybil Fingerprint** | ✅ Complete | Canvas, WebGL, hardware concurrency & display fingerprinting SHA-256 hash |
-| **Cairo Contract** | ✅ Compiled | Cairo 2.8.0 (`contracts/src/sblake.cairo`), compiled to Sierra & CASM via Scarb 2.8.1 |
+| **Frontend UI** | ✅ Complete | Matrix-industrial theme, responsive layout, STRK20 dark pool controls, PWA setup |
+| **PoW Mining Engine** | ✅ Complete | Multi-threaded Web Workers with BLAKE2s, dynamic nonce batching |
+| **Privacy Note Prover** | ✅ Complete | STRK20 note commitments, scoped viewing keys (`src/utils/privacy.ts`) |
+| **Anti-Sybil Fingerprint** | ✅ Complete | Canvas, WebGL renderer, hardware concurrency & display fingerprinting SHA-256 |
+| **Cairo Contract** | ✅ Upgraded | Cairo 2.8.0 (`sblake.cairo`) with `ISBlakePrivacy`, daily mint caps, era halving & commitments |
 | **Wallet Connector** | ✅ Ready | Modern `@starknet-io/get-starknet` (v4.0+) integration |
-| **Contract Deployment** | ⏳ Pending | Awaiting deployment on Starknet Sepolia testnet |
-| **RPC & On-Chain Hookup** | ⏳ Pending | `src/utils/starknet.ts` awaiting real contract address & ABI integration |
-| **Brother ID System** | ⏳ Planned | Client parameters ready; on-chain bonus verification planned |
+| **Build Pipeline** | ✅ Verified | Both Scarb 2.8.1 contract build & Vite production bundle pass cleanly with 0 errors |
+| **Contract Deployment** | ⏳ Ready | Pre-built artifacts ready for Sepolia deployment |
 
 ---
 
 ## ✅ Completed Milestones
+- [x] **STRK20 Shielded Mining Implementation**: Privacy note commitments and `mint_shielded` function in Cairo with +15% emission yield boost.
+- [x] **Economic Flywheel Integration**: Burn sink structure (0.25% fee), shielded staking pool UI telemetry, and Brother ID 2x daily cap.
 - [x] **Browser Mining Engine**: Parallel Web Worker implementation utilizing BLAKE2s with CPU core scalability.
-- [x] **Client Dashboard UI**: Hashrate telemetry (KH/s), session metrics, era progress bar, and thread control.
+- [x] **Client Dashboard UI**: Hashrate telemetry (KH/s), session metrics, viewing key indicator, and thread control.
 - [x] **Anti-Sybil Device Identity**: Client-side hardware/rendering fingerprinting for wallet-hardware binding.
-- [x] **Cairo Smart Contract**: Storage structures, `get_challenge`, `mint`, and `balance_of` logic compiled cleanly with Scarb.
+- [x] **Cairo Smart Contract**: Storage structures, `get_challenge`, `mint`, `mint_shielded`, and `shield` compiled cleanly with Scarb.
 - [x] **Browser Deployment Workaround**: Injected wallet script (`scripts/browser_deploy.js`) for browser console deployment via Starkscan/Voyager.
-- [x] **Repository Sync**: Codebase pushed to remote GitHub repository (`fearmexxx/blake`).
 
 ---
 

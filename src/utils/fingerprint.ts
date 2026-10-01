@@ -18,12 +18,21 @@ export const getFingerprint = async (): Promise<string> => {
     ctx.fillText("StarkBlake Miner", 4, 17);
     fingerprint += canvas.toDataURL();
   }
+
+  // WebGL renderer information
+  if (webgl) {
+    const ext = webgl.getExtension('WEBGL_debug_renderer_info');
+    if (ext) {
+      fingerprint += webgl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '';
+      fingerprint += webgl.getParameter(ext.UNMASKED_VENDOR_WEBGL) || '';
+    }
+  }
   
-  // Hardware info
+  // Hardware and display telemetry
   fingerprint += navigator.hardwareConcurrency || '0';
   fingerprint += screen.width + 'x' + screen.height + 'x' + screen.colorDepth;
   
-  // Simplified hash of the fingerprint string
+  // SHA-256 hash of device signature
   const encoder = new TextEncoder();
   const data = encoder.encode(fingerprint);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);

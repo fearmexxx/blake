@@ -1,1 +1,187 @@
 test
+# StarkBlake (SBLAKE) — Phase 1 Product Requirements Document (PRD)
+
+**Version:** 1.0  
+**Date:** May 11, 2026  
+**Status:** Draft → Ready for Implementation  
+**Project:** Fair-launch browser + phone PoW miner on Starknet with strong anti-Sybil mechanics and future dVPN hybrid utility.
+
+---
+
+## 1. Vision & Objectives
+
+**Vision**  
+Build the **fairest, most accessible PoW token** on Starknet — a 100% community-driven token where **real humans using browsers and phones** get the vast majority of the supply. Phase 1 focuses on pure mining + genesis sale to create immediate liquidity and development runway without any hidden team premine.
+
+**Phase 1 Success Goals**
+- Launch a fully functional, browser-first miner in < 4 weeks.
+- Achieve wide distribution: thousands of unique real wallets mining daily.
+- Raise $30k–$150k+ via transparent genesis sale to seed liquidity + fund development.
+- Create a fun, addictive mining experience that feels like the original Ethereum HASH miner but **fairer**.
+- Lay technical foundation for Phase 2 (dVPN hybrid with 40% yield boost + buyback/burn).
+
+**Core Principles**
+- Maximum fairness: phones & browsers matter most.
+- Strong anti-Sybil / anti-bot / anti-GPU-farm mechanics baked into the contract.
+- No team allocation, no VC tokens, no hidden premine.
+- Transparent, on-chain everything.
+
+---
+
+## 2. Tokenomics & Emission Schedule (Phase 1)
+
+**Token:** SBLAKE (StarkBlake)  
+**Total Supply:** 21,000,000 SBLAKE (Bitcoin-style)
+
+| Category          | %     | Amount          | Details |
+|-------------------|-------|-----------------|---------|
+| Genesis Sale      | 5%    | 1,050,000       | Fixed-price public sale (e.g. $0.02–$0.05) |
+| LP Seed / Hook    | 5%    | 1,050,000       | Minted during genesis + seedPool() to DEX (Jediswap / Starknet-native) — LP locked forever |
+| Mining (PoW)      | **90%** | **18,900,000** | Pure browser/phone mining after genesis sells out |
+
+**Emission Schedule** (modeled after HASH screenshot)
+- Era 1: 100 SBLAKE per mint (~69 days)
+- Era 2: 50 SBLAKE per mint
+- Era 3: 25 SBLAKE per mint
+- Era 4: 12.5 SBLAKE per mint
+- Halving cadence: every 100,000 mints
+- Full distribution: ~290 days
+- Difficulty retargets every epoch to target ~1 mint per minute globally
+
+---
+
+## 3. Key Features — Phase 1 Scope (MVP)
+
+### 3.1 Smart Contract (Cairo 2 / Starknet)
+- Genesis Sale contract (fixed price, wallet cap, first-come-first-served)
+- Mining contract with:
+  - One active challenge per wallet (`current_challenge[address]`)
+  - Hard daily mint cap (configurable, default **10 mints per 24h** per wallet)
+  - Mint cooldown (5–10 minutes)
+  - Challenge = `blake2s(wallet + epoch + latest_block_hash + BrotherID?)`
+  - On-chain verification of BLAKE2s hash + nonce
+  - Difficulty adjustment (Bitcoin-style retarget)
+  - Epoch rotation + halving logic
+  - Fingerprint storage (one-time per wallet)
+  - Brother ID bonus (2× daily cap for verified Brother ID holders)
+- `seedPool()` function to mint LP-side tokens and lock liquidity
+- All admin functions time-locked + multisig (transparent dev fund)
+
+**Algorithm:** BLAKE2s (native/fast on Starknet, excellent WASM performance, ASIC-resistant enough for early stage)
+
+### 3.2 Browser Miner (Web + WASM)
+- Single-page web app (React/Vite recommended)
+- Multi-threaded WASM mining (parallel workers based on CPU cores)
+- Real-time hashrate, ETA, progress bars, era info
+- Automatic challenge fetching & submission via starknet.js / argent/x
+- **Browser fingerprinting** (Canvas + WebGL + AudioContext + hardware concurrency + fonts + screen)
+- Fingerprint submitted once and bound to wallet
+- Clean UI exactly like the HASH miner screenshot you shared
+- “STOP” button, tip slider (optional), keep-mining toggle
+- PWA support for phone home-screen install + background mining (where possible)
+
+### 3.3 Anti-Sybil & Fairness Mechanisms
+| Mechanism                  | Enforcement     | Effect |
+|---------------------------|-----------------|--------|
+| One challenge per wallet  | On-chain        | Blocks multi-tab abuse |
+| Daily mint cap (10)       | On-chain        | Caps GPU farms per wallet |
+| Mint cooldown             | On-chain        | Prevents spam |
+| Browser fingerprint       | Client + contract | Detects cloned browsers |
+| Brother ID bonus          | On-chain        | Rewards real humans (2× cap) |
+| Challenge freshness       | Latest block hash | Stops pre-computing |
+
+### 3.4 Genesis Sale Flow
+1. Users buy SBLAKE at fixed price with ETH/STRK
+2. No per-wallet cap during genesis (first-come-first-served)
+3. Sale ends at 1,050,000 tokens sold
+4. Proceeds automatically used to seed DEX pool + lock LP forever
+
+---
+
+## 4. User Flows
+
+**1. New User Mining Flow**
+1. Visit miner.starkblake.xyz → Connect Starknet wallet
+2. (Optional) Verify Brother ID for 2× daily cap
+3. Click “START MINING” → get challenge + start WASM workers
+4. Browser mines in background
+5. On valid nonce → auto-submit tx → mint reward
+6. Daily cap reached → friendly message “Come back tomorrow!”
+
+**2. Genesis Buyer Flow**
+1. Visit sale page
+2. Buy SBLAKE with ETH/STRK
+3. After sale ends → trade on DEX or start mining
+
+**3. Monitoring Dashboard**
+- Live stats: total minted, current difficulty, global hashrate estimate, era progress
+
+---
+
+## 5. Non-Functional Requirements
+
+- **Performance:** > 100 MH/s on modern laptops, usable on mid-range phones
+- **Gas:** All mints < 300k gas (Starknet advantage)
+- **Security:** Contract audited (at least one reputable auditor before mainnet)
+- **UX:** Works on mobile browsers, dark mode, mobile-optimized
+- **Privacy:** No telemetry except optional anonymous stats
+- **Decentralization:** No central server required after launch (challenges fetched directly from Starknet RPC)
+- **Accessibility:** Open-source (MIT license)
+
+---
+
+## 6. Out of Scope for Phase 1
+
+- dVPN integration & 40% hybrid boost (Phase 2)
+- GPU/WebGPU acceleration (nice-to-have, can add later)
+- Mobile native app (PWA first)
+- Staking / yield farming
+- Governance token mechanics
+- Advanced backend challenge server (can be added in Phase 1.5 if needed)
+
+---
+
+## 7. Phase 2 Teaser (Hybrid dVPN)
+
+- Run light dVPN node or use the network → +40% mining yield
+- VPN fees → auto buyback + burn of SBLAKE
+- Stronger anti-Sybil via real bandwidth contribution + Brother ID
+
+---
+
+## 8. Success Metrics (30 days post-launch)
+
+- ≥ 5,000 unique mining wallets
+- Genesis fully sold out
+- DEX liquidity ≥ $100k locked
+- Daily on-chain mints ≥ 500
+- Positive community sentiment (Twitter/Discord)
+
+---
+
+## 9. Assumptions & Dependencies
+
+- Brother ID system is live and queryable on Starknet
+- Starknet RPC infrastructure remains cheap & reliable
+- Community willing to run the miner in browser tabs/phones
+- We can implement BLAKE2s verifier in Cairo quickly (already feasible)
+
+---
+
+**Next Steps After This PRD**
+1. Finalize token name & ticker
+2. Write & audit Cairo contracts
+3. Build WASM miner + frontend
+4. Deploy to Starknet testnet → mainnet
+5. Launch genesis sale + marketing
+
+---
+
+**This PRD is ready to be turned into code.**  
+Copy the entire content above into a file named `phase1-prd.md` and you have a clean, downloadable, professional document.
+
+Would you like me to now generate:
+- The full Cairo contract skeleton, or
+- The complete WASM miner code + frontend structure?
+
+Just say the word and we ship Phase 1. 🚀

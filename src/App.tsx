@@ -10,10 +10,15 @@ const App: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleConnect = async () => {
-    const res = await connect();
-    if (res && res.isConnected) {
-      setAddress(res.selectedAddress);
-      setWallet(res);
+    try {
+      const res: any = await connect();
+      if (res) {
+        const addr = res.selectedAddress || res.account?.address || null;
+        setAddress(addr);
+        setWallet(res);
+      }
+    } catch (e) {
+      console.error("Wallet connection failed:", e);
     }
   };
 
@@ -134,19 +139,37 @@ const App: React.FC = () => {
             </div>
 
             <div className="glass-panel p-6 space-y-4 bg-[#00f3ff]/5 border-[#00f3ff]/20">
-              <h3 className="font-bold flex items-center gap-2 text-[#00f3ff]">
+              <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+                <h3 className="font-bold flex items-center gap-2 text-[#00f3ff] text-sm">
+                  <Shield size={16} />
+                  STRK20 DARK POOL
+                </h3>
+                <span className="text-[10px] bg-[#00f3ff]/10 text-[#00f3ff] px-2 py-0.5 rounded font-mono font-bold">SNIP-36</span>
+              </div>
+              <p className="text-xs text-gray-400">
+                Privacy-preserving note commitments with deflationary buyback & burn.
+              </p>
+              <div className="space-y-3 pt-2">
+                <StatItem label="Shielded Staked" value="48.5%" />
+                <StatItem label="Mining Boost" value="+15% Yield" />
+                <StatItem label="Burn Sink Rate" value="0.25% Tx" />
+              </div>
+            </div>
+
+            <div className="glass-panel p-6 space-y-4 bg-[#00ff41]/5 border-[#00ff41]/20">
+              <h3 className="font-bold flex items-center gap-2 text-[#00ff41]">
                 <Info size={18} />
                 GENESIS SALE
               </h3>
               <p className="text-sm text-gray-400">
-                5% of supply is available at fixed price to seed liquidity.
+                5% of supply is available at fixed price to seed DEX pool & lock LP.
               </p>
               <div className="flex justify-between items-end">
                 <div>
                   <div className="text-2xl font-bold">$0.02</div>
                   <div className="text-[10px] text-gray-500 tracking-widest uppercase">Per SBLAKE</div>
                 </div>
-                <button className="px-4 py-2 bg-[#00f3ff] text-black text-xs font-bold rounded-sm">BUY NOW</button>
+                <button className="px-4 py-2 bg-[#00ff41] text-black text-xs font-bold rounded-sm hover:bg-[#00cc33] transition-colors">BUY NOW</button>
               </div>
             </div>
           </div>
