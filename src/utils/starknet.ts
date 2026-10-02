@@ -1,10 +1,19 @@
 import { Contract, RpcProvider, CallData } from 'starknet';
 import { createShieldedNote, saveNoteLocally } from './privacy';
 
-// Configurable contract address (defaults to deployed contract once set)
-export const CONTRACT_ADDRESS = "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+// Configurable contract address (defaults to deployed contract or local override once set)
+export let CONTRACT_ADDRESS = typeof window !== 'undefined' && localStorage.getItem('sblake_custom_contract')
+  ? localStorage.getItem('sblake_custom_contract')!
+  : "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 
-export const provider = new RpcProvider({ nodeUrl: "https://rpc.starknet-testnet.lava.build" });
+export const setCustomContractAddress = (addr: string) => {
+  CONTRACT_ADDRESS = addr;
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('sblake_custom_contract', addr);
+  }
+};
+
+export const provider = new RpcProvider({ nodeUrl: "https://starknet-sepolia-rpc.publicnode.com" });
 
 export interface ChallengeData {
   epoch: number;

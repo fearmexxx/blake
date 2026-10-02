@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { connect, disconnect } from '@starknet-io/get-starknet';
 import { Wallet, LogOut, Shield, Zap, Info, Menu, Flame, Loader2 } from 'lucide-react';
 import Miner from './components/Miner';
+import { ContractDeployer } from './components/ContractDeployer';
 
 const App: React.FC = () => {
   const [address, setAddress] = useState<string | null>(null);
@@ -146,6 +147,7 @@ const App: React.FC = () => {
         
         <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
           <a href="#" className="hover:text-[#00ff41] transition-colors">DASHBOARD</a>
+          <a href="#deploy" className="hover:text-[#00ff41] text-[#00ff41] transition-colors font-bold">DEPLOY CONTRACT</a>
           <a href="#" className="hover:text-[#00ff41] transition-colors">STRK20 POOL</a>
           <a href="#" className="hover:text-[#00ff41] transition-colors">GENESIS SALE</a>
           <a href="#" className="hover:text-[#00ff41] transition-colors">TOKENOMICS</a>
@@ -233,6 +235,9 @@ const App: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* 1-Click Sepolia Contract Deployer */}
+            <ContractDeployer account={wallet?.account || wallet} />
           </div>
 
           {/* Right Column: Global Stats */}
