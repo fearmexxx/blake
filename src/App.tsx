@@ -3,6 +3,7 @@ import { connect, disconnect } from '@starknet-io/get-starknet';
 import { Wallet, LogOut, Shield, Zap, Info, Menu, Flame, Loader2 } from 'lucide-react';
 import Miner from './components/Miner';
 import { ContractDeployer } from './components/ContractDeployer';
+import { EconomicSimulator } from './components/EconomicSimulator';
 
 const App: React.FC = () => {
   const [address, setAddress] = useState<string | null>(null);
@@ -145,11 +146,11 @@ const App: React.FC = () => {
           <span className="text-xl font-bold tracking-tighter">STARK<span className="text-[#00ff41]">BLAKE</span></span>
         </div>
         
-        <div className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-400">
+        <div className="hidden md:flex items-center gap-6 text-sm font-medium text-gray-400">
           <a href="#" className="hover:text-[#00ff41] transition-colors">DASHBOARD</a>
           <a href="#deploy" className="hover:text-[#00ff41] text-[#00ff41] transition-colors font-bold">DEPLOY CONTRACT</a>
+          <a href="#simulator" className="hover:text-[#00f3ff] text-[#00f3ff] transition-colors font-bold">FLYWEALTH SIMULATOR</a>
           <a href="#" className="hover:text-[#00ff41] transition-colors">STRK20 POOL</a>
-          <a href="#" className="hover:text-[#00ff41] transition-colors">GENESIS SALE</a>
           <a href="#" className="hover:text-[#00ff41] transition-colors">TOKENOMICS</a>
         </div>
 
@@ -238,6 +239,9 @@ const App: React.FC = () => {
 
             {/* 1-Click Sepolia Contract Deployer */}
             <ContractDeployer account={wallet?.account || wallet} />
+
+            {/* Economic Flywheel & Feasibility Simulator */}
+            <EconomicSimulator />
           </div>
 
           {/* Right Column: Global Stats */}
