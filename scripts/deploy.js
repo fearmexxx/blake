@@ -1,62 +1,60 @@
-import { RpcProvider, Account, Contract, CallData, json, ec, hash, stark } from 'starknet';
+import { RpcProvider, Account, CallData, json, hash, constants } from 'starknet';
 import fs from 'fs';
 
-const provider = new RpcProvider({ nodeUrl: "https://rpc.starknet-testnet.lava.build" });
+const ALCHEMY_SEPOLIA_URL = "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/qXU4ta4yLmxUhIoLb-cZ7KtsNn808Pjw";
+const UDC_ADDRESS = constants.UDC.ADDRESS;
+const SBLAKE_SIERRA_CLASS_HASH = "0x3ddeba723665c7e488f6f85106cadb646101baa7c310be71741394efecd0f2f";
 
-async function deploy() {
-  const accountData = JSON.parse(fs.readFileSync('./account_sepolia.json', 'utf8'));
+const provider = new RpcProvider({ nodeUrl: ALCHEMY_SEPOLIA_URL });
 
-  // 1. Deploy the Account Contract (if needed)
-  const OZaccountClassHash = '0x061efe27df9de75ef16ed6ca873446bfe96c2dae719117f77958cfcc589B79d0';
-  const account = new Account(provider, accountData.address, accountData.privateKey);
-
-  console.log('Checking account status on Lava RPC...');
-  try {
-    await provider.getClassHashAt(account.address, 'latest');
-    console.log('Account already deployed.');
-  } catch (e) {
-    console.log('Account not detected. Attempting to deploy account contract...');
-    try {
-      const { transaction_hash, contract_address } = await account.deployAccount({
-        classHash: OZaccountClassHash,
-        constructorCalldata: CallData.compile({ publicKey: accountData.publicKey }),
-        addressSalt: accountData.publicKey,
-      });
-      console.log('Deployment TX sent:', transaction_hash);
-      await provider.waitForTransaction(transaction_hash);
-      console.log('Account deployed at:', contract_address);
-    } catch (deployError) {
-      console.error('Account deployment failed:', deployError);
-      throw deployError;
+// Intercept RPC calls to sanitize 'pending' block IDs and adapt v0.10 gas params
+provider.channel.fetchEndpoint = (orig => async (m, p) => {
+  if (p && p.block_id === 'pending') p.block_id = 'latest';
+  if (p && p.request && Array.isArray(p.request)) {
+    for (const req of p.request) {
+      if (req && req.resource_bounds && !req.resource_bounds.l1_data_gas) {
+        req.resource_bounds.l1_data_gas = { max_amount: '0x0', max_price_per_unit: '0x0' };
+      }
     }
   }
+  const res = await orig(m, p);
+  if (m === 'starknet_estimateFee' && Array.isArray(res)) {
+    for (const item of res) {
+      if (item && !item.gas_consumed) item.gas_consumed = item.l2_gas_consumed || item.l1_gas_consumed || '0x0';
+      if (item && !item.gas_price) item.gas_price = item.l2_gas_price || item.l1_gas_price || '0x0';
+    }
+  }
+  return res;
+})(provider.channel.fetchEndpoint.bind(provider.channel));
 
-  // 2. Declare and Deploy SBLAKE
-  console.log('Reading artifacts...');
-  const sierra = json.parse(fs.readFileSync('./contracts/target/dev/sblake_sblake.contract_class.json', 'utf8'));
-  const casm = json.parse(fs.readFileSync('./contracts/target/dev/sblake_sblake.compiled_contract_class.json', 'utf8'));
+async function main() {
+  console.log("=== STARKBLAKE SEPOLIA DEPLOYER ===");
+  console.log("RPC:", ALCHEMY_SEPOLIA_URL);
+  console.log("UDC:", UDC_ADDRESS);
+  console.log("SBLAKE Class Hash:", SBLAKE_SIERRA_CLASS_HASH);
 
-  console.log('Declaring and Deploying SBLAKE...');
-  const deployResponse = await account.declareAndDeploy({
-    contract: sierra,
-    casm: casm,
-    constructorCalldata: [],
-  });
+  // Check if class is declared
+  let isDeclared = false;
+  try {
+    await provider.getClassByHash(SBLAKE_SIERRA_CLASS_HASH, 'latest');
+    isDeclared = true;
+    console.log("Status: Class IS ALREADY DECLARED on Sepolia.");
+  } catch {
+    console.log("Status: Class NOT YET declared on Sepolia.");
+  }
 
-  console.log('--- DEPLOYMENT SUCCESSFUL ---');
-  console.log('Contract Address:', deployResponse.deploy.contract_address);
-  console.log('Transaction Hash:', deployResponse.deploy.transaction_hash);
-  console.log('-----------------------------');
+  // Load account data if present
+  let accountData = null;
+  if (fs.existsSync('./account_sepolia.json')) {
+    accountData = JSON.parse(fs.readFileSync('./account_sepolia.json', 'utf8'));
+    console.log("Loaded account:", accountData.address);
+  }
 
-  // Update frontend config
-  const utilsPath = './src/utils/starknet.ts';
-  let utilsContent = fs.readFileSync(utilsPath, 'utf8');
-  utilsContent = utilsContent.replace(
-    /export const CONTRACT_ADDRESS = "0x[a-fA-F0-9]+";/,
-    `export const CONTRACT_ADDRESS = "${deployResponse.deploy.contract_address}";`
-  );
-  fs.writeFileSync(utilsPath, utilsContent);
-  console.log('Updated src/utils/starknet.ts with new address.');
+  console.log("\n-> For Xverse Browser Wallet:");
+  console.log("1. Open the StarkBlake UI in your browser (http://localhost:5173).");
+  console.log("2. Connect your Xverse wallet (must have Sepolia STRK).");
+  console.log("3. Click 'DEPLOY SBLAKE CONTRACT TO SEPOLIA'.");
+  console.log("4. Xverse will approve the 1-click UDC deployment without 'Not implemented' errors.");
 }
 
-deploy().catch(console.error);
+main().catch(console.error);

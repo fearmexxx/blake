@@ -46,9 +46,28 @@ export const createSanitizedProvider = (nodeUrl: string = getActiveRpcUrl()): Rp
         if (params.block_identifier === 'pending') {
           params.block_identifier = 'latest';
         }
+        if (params.request && Array.isArray(params.request)) {
+          for (const req of params.request) {
+            if (req && req.resource_bounds && !req.resource_bounds.l1_data_gas) {
+              req.resource_bounds.l1_data_gas = { max_amount: '0x0', max_price_per_unit: '0x0' };
+            }
+          }
+        }
       }
       try {
-        return await origFetchEndpoint(method, params);
+        const res = await origFetchEndpoint(method, params);
+        // Map v0.10 gas consumption fields to starknet.js 6.11 expectations
+        if (method === 'starknet_estimateFee' && Array.isArray(res)) {
+          for (const item of res) {
+            if (item && !item.gas_consumed) {
+              item.gas_consumed = item.l2_gas_consumed || item.l1_gas_consumed || '0x0';
+            }
+            if (item && !item.gas_price) {
+              item.gas_price = item.l2_gas_price || item.l1_gas_price || '0x0';
+            }
+          }
+        }
+        return res;
       } catch (err: any) {
         // Automatic failover on OnFinality / rate limit errors
         if (

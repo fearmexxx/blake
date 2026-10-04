@@ -1,48 +1,45 @@
-// Use this script in the browser console of starkscan.co or voyager.online
-async function deploySBlake() {
-    if (typeof window.starknet === 'undefined') {
-        alert("Please install Argent X or Braavos wallet!");
-        return;
-    }
+// Browser console script to deploy SBLAKE via UDC in Xverse / Argent X / Braavos
+async function deploySBlakeUDC() {
+  const UDC_ADDRESS = "0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf";
+  const SBLAKE_SIERRA_CLASS_HASH = "0x3ddeba723665c7e488f6f85106cadb646101baa7c310be71741394efecd0f2f";
 
-    console.log("Connecting wallet...");
-    const wallet = await window.starknet.enable();
-    if (!wallet) return;
+  const wallet = window.starknet;
+  if (!wallet) {
+    alert("Please install or enable your Xverse / Argent X / Braavos wallet!");
+    return;
+  }
 
-    const provider = window.starknet.provider;
-    const address = window.starknet.selectedAddress;
+  console.log("Connecting wallet...");
+  if (typeof wallet.enable === 'function') {
+    await wallet.enable();
+  }
 
-    console.log("Connected:", address);
-    console.log("Please copy the Sierra and Casm JSON contents from your local files:");
-    console.log("1. e:/2026/starkmine/contracts/target/dev/sblake_sblake.contract_class.json");
-    console.log("2. e:/2026/starkmine/contracts/target/dev/sblake_sblake.compiled_contract_class.json");
-    
-    alert("Check the console for instructions. You will need to paste the file contents when prompted.");
+  const account = wallet.account || wallet;
+  console.log("Connected account:", account.address || wallet.selectedAddress);
 
-    const sierraStr = prompt("Paste the content of sblake_sblake.contract_class.json here:");
-    const casmStr = prompt("Paste the content of sblake_sblake.compiled_contract_class.json here:");
+  const salt = '0x' + Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
 
-    const sierra = JSON.parse(sierraStr);
-    const casm = JSON.parse(casmStr);
+  console.log("Deploying SBLAKE contract instance via UDC...");
+  try {
+    const res = await account.execute({
+      contractAddress: UDC_ADDRESS,
+      entrypoint: "deployContract",
+      calldata: [
+        SBLAKE_SIERRA_CLASS_HASH,
+        salt,
+        "0", // unique = false
+        "0"  // calldata length = 0
+      ]
+    });
 
-    console.log("Declaring and Deploying...");
-    try {
-        // Using starknet.js version usually available on these sites
-        const account = window.starknet.account;
-        const deployResponse = await account.declareAndDeploy({
-            contract: sierra,
-            casm: casm,
-            constructorCalldata: [],
-        });
-
-        console.log("--- DEPLOYMENT SUCCESSFUL ---");
-        console.log("Contract Address:", deployResponse.deploy.contract_address);
-        console.log("Transaction Hash:", deployResponse.deploy.transaction_hash);
-        alert("Success! Contract Address: " + deployResponse.deploy.contract_address);
-    } catch (e) {
-        console.error("Deployment failed:", e);
-        alert("Error: " + e.message);
-    }
+    console.log("--- DEPLOYMENT TRANSACTION SUBMITTED ---");
+    console.log("Tx Hash:", res.transaction_hash);
+    alert("Transaction submitted! Tx: " + res.transaction_hash);
+  } catch (err) {
+    console.error("Deploy failed:", err);
+    alert("Error: " + err.message);
+  }
 }
 
-deploySBlake();
+deploySBlakeUDC();

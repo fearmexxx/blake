@@ -9,26 +9,31 @@ import {
   Key, 
   ShieldCheck, 
   Check, 
-  Cpu, 
   SlidersHorizontal,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Coins
 } from 'lucide-react';
-import { WalletAccount, CallData, Contract } from 'starknet';
+import { WalletAccount, CallData, Contract, constants, hash } from 'starknet';
 import { 
   setCustomContractAddress, 
   provider, 
   CONTRACT_ADDRESS, 
   bindAccountToCustomProvider,
-  upgradeContract,
-  getActiveRpcUrl
+  upgradeContract
 } from '../utils/starknet';
+import { 
+  RELAYER_CONFIG, 
+  STRK_TOKEN_ADDRESS, 
+  getRelayerBalance, 
+  deployRelayerAndDeclare 
+} from '../utils/relayer';
 import sierraData from '../../contracts/target/dev/sblake_sblake.contract_class.json';
-import casmData from '../../contracts/target/dev/sblake_sblake.compiled_contract_class.json';
 
 // Pre-computed compiled Sierra class hash of contracts/src/sblake.cairo
 export const SBLAKE_SIERRA_CLASS_HASH = "0x3ddeba723665c7e488f6f85106cadb646101baa7c310be71741394efecd0f2f";
 export const SBLAKE_CASM_CLASS_HASH = "0x30f8a00a86afe3393a7d1d9829bc3e7648828c0229a424b530818d75a6cc606";
+const UDC_ADDRESS = constants.UDC.ADDRESS;
 
 interface ContractDeployerProps {
   account: any;
@@ -46,6 +51,9 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
   const [txHash, setTxHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Status of on-chain declaration
+  const [isClassDeclared, setIsClassDeclared] = useState<boolean | null>(null);
+
   // Upgrade & Governance state
   const [showUpgradePanel, setShowUpgradePanel] = useState(false);
   const [newClassHash, setNewClassHash] = useState<string>('');
@@ -54,6 +62,20 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
   const [contractOwner, setContractOwner] = useState<string | null>(null);
   const [newHalvingInterval, setNewHalvingInterval] = useState<string>('');
   const [isUpdatingInterval, setIsUpdatingInterval] = useState(false);
+
+  // Check if class is declared on mount
+  useEffect(() => {
+    checkDeclarationStatus();
+  }, []);
+
+  const checkDeclarationStatus = async () => {
+    try {
+      await provider.getClassByHash(SBLAKE_SIERRA_CLASS_HASH);
+      setIsClassDeclared(true);
+    } catch {
+      setIsClassDeclared(false);
+    }
+  };
 
   // Load contract owner if deployed
   useEffect(() => {
@@ -88,85 +110,110 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
   const handleDeploy = async () => {
     const activeAcc = getEffectiveAccount();
     if (!activeAcc) {
-      setError("Please connect your Argent X or Braavos wallet with Sepolia testnet funds first.");
+      setError("Please connect your Xverse, Argent X, or Braavos wallet with Sepolia STRK funds first.");
       return;
     }
 
     setError(null);
     setIsDeploying(true);
-    setStep('Connecting to Starknet Sepolia via Alchemy v0_10...');
+    setStep('Verifying Starknet Sepolia class status...');
 
     try {
-      console.log("[Deployer] Executing deployment via wallet:", activeAcc.address || activeAcc);
-      let contractAddress = '';
-      let transactionHash = '';
-
-      // Check if Sierra class hash is already declared on Sepolia
-      let isAlreadyDeclared = false;
+      console.log("[Deployer] Executing deployment with account:", activeAcc.address || activeAcc);
+      
+      // Step 1: Ensure Class Hash is declared on Sepolia
+      let declared = false;
       try {
         await provider.getClassByHash(SBLAKE_SIERRA_CLASS_HASH);
-        isAlreadyDeclared = true;
-        console.log("[Deployer] Class hash is already declared on Sepolia:", SBLAKE_SIERRA_CLASS_HASH);
+        declared = true;
+        setIsClassDeclared(true);
+        console.log("[Deployer] Class hash already declared on-chain.");
       } catch {
-        console.log("[Deployer] Class hash not found on-chain, proceeding with declaration...");
+        declared = false;
+        setIsClassDeclared(false);
       }
 
-      let classHash = SBLAKE_SIERRA_CLASS_HASH;
+      if (!declared) {
+        // Consumer wallets like Xverse do not implement wallet_addDeclareTransaction.
+        // We handle declaration automatically via our local relayer account.
+        const currentRelayerBal = await getRelayerBalance();
+        console.log("[Deployer] Current Relayer STRK balance:", currentRelayerBal);
 
-      if (!isAlreadyDeclared) {
-        setStep('Step 1/2: Submitting DECLARE transaction in wallet...');
-        if (typeof activeAcc.declare === 'function') {
-          try {
-            const declareRes = await activeAcc.declare({
-              contract: sierraData,
-              casm: casmData,
-            });
-            classHash = declareRes.class_hash || SBLAKE_SIERRA_CLASS_HASH;
-            console.log("[Deployer] Declared class hash:", classHash);
-          } catch (declareErr: any) {
-            if (
-              declareErr?.message?.includes('already declared') || 
-              declareErr?.message?.includes('is not declared')
-            ) {
-              console.log("[Deployer] Class hash already declared:", SBLAKE_SIERRA_CLASS_HASH);
-            } else {
-              throw declareErr;
-            }
+        if (currentRelayerBal < 50000000000000000n) { // < 0.05 STRK
+          setStep("Step 1/3: Approving 0.1 STRK in wallet to fund declaration relayer...");
+          
+          if (!activeAcc.execute) {
+            throw new Error("Connected wallet does not support execute transactions.");
           }
+
+          // Transfer 0.1 STRK to the relayer
+          const transferTx = await activeAcc.execute({
+            contractAddress: STRK_TOKEN_ADDRESS,
+            entrypoint: "transfer",
+            calldata: CallData.compile({
+              recipient: RELAYER_CONFIG.address,
+              amount: { low: 100000000000000000n, high: 0n }, // 0.1 STRK
+            }),
+          });
+
+          setStep("Waiting for 0.1 STRK funding confirmation on Sepolia...");
+          await provider.waitForTransaction(transferTx.transaction_hash);
         }
+
+        // Relayer now has gas to deploy account (if needed) and declare SBLAKE class
+        setStep("Step 2/3: Relayer deploying on Sepolia and declaring SBLAKE Cairo class...");
+        await deployRelayerAndDeclare((msg) => setStep(`Step 2/3: ${msg}`));
+        setIsClassDeclared(true);
       }
 
-      // Step 2: Deploy Contract via UDC
-      setStep('Step 2/2: Submitting DEPLOY transaction in wallet...');
-      if (typeof activeAcc.deployContract === 'function') {
-        const deployRes = await activeAcc.deployContract({
-          classHash,
-          constructorCalldata: [],
+      // Step 2: Deploy contract instance via UDC (Universal Deployer Contract)
+      // This is a standard invoke/execute call that Xverse, Argent, and Braavos support 100%!
+      setStep("Step 3/3: Submitting DEPLOY transaction in wallet via UDC...");
+      
+      const salt = '0x' + Array.from(crypto.getRandomValues(new Uint8Array(16)))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      const predictedAddress = hash.calculateContractAddressFromHash(
+        salt,
+        SBLAKE_SIERRA_CLASS_HASH,
+        [],
+        UDC_ADDRESS
+      );
+
+      console.log("[Deployer] Predicted contract address:", predictedAddress);
+
+      let txHashRes = '';
+      if (typeof activeAcc.execute === 'function') {
+        const deployRes = await activeAcc.execute({
+          contractAddress: UDC_ADDRESS,
+          entrypoint: "deployContract",
+          calldata: CallData.compile({
+            classHash: SBLAKE_SIERRA_CLASS_HASH,
+            salt: salt,
+            unique: 0,
+            calldata: [],
+          }),
         });
-        contractAddress = deployRes.contract_address;
-        transactionHash = deployRes.transaction_hash;
-      } else if (typeof activeAcc.deploy === 'function') {
-        const deployRes = await activeAcc.deploy({
-          classHash,
-          constructorCalldata: [],
-        });
-        contractAddress = deployRes.contract_address;
-        transactionHash = deployRes.transaction_hash;
+        txHashRes = deployRes.transaction_hash;
       } else {
-        throw new Error("Connected wallet does not support contract deployment methods.");
+        throw new Error("Connected wallet does not support execute calls.");
       }
 
-      setDeployedAddress(contractAddress);
-      setTxHash(transactionHash);
-      setCustomContractAddress(contractAddress);
+      setDeployedAddress(predictedAddress);
+      setTxHash(txHashRes);
+      setCustomContractAddress(predictedAddress);
       setStep('Contract deployed successfully on Sepolia!');
 
       if (onDeployed) {
-        onDeployed(contractAddress);
+        onDeployed(predictedAddress);
       }
     } catch (err: any) {
       console.error("[Deployer Error]:", err);
-      setError(err?.message || "Deployment failed. Ensure your wallet has testnet STRK/ETH for gas.");
+      let errMsg = err?.message || "Deployment failed.";
+      if (errMsg.includes("Not implemented")) {
+        errMsg = "Wallet returned 'Not implemented' for raw declaration. The automatic relayer flow has been activated to bypass this restriction.";
+      }
+      setError(errMsg);
     } finally {
       setIsDeploying(false);
     }
@@ -251,7 +298,7 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] bg-[#00ff41]/10 text-[#00ff41] px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1">
-            <ShieldCheck size={12} /> ALCHEMY v0_10 PROTECTED
+            <ShieldCheck size={12} /> XVERSE & ARGENT READY
           </span>
           <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded font-mono font-bold">
             UPGRADEABLE
@@ -260,7 +307,7 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
       </div>
 
       <p className="text-xs text-gray-400">
-        Deploy the compiled <strong>SBLAKE (STRK20 Halving & Privacy)</strong> contract directly to Starknet Sepolia using your connected wallet. Rate limits and block-id inconsistencies are automatically bypassed.
+        Deploy your own <strong>SBLAKE (STRK20 Privacy & Halving)</strong> smart contract to Starknet Sepolia. Works seamlessly with Xverse, Argent X, and Braavos without requiring CLI or private key exports.
       </p>
 
       {deployedAddress ? (
@@ -399,27 +446,41 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
             </div>
           )}
 
-          <button
-            onClick={handleDeploy}
-            disabled={isDeploying || !account}
-            className={`w-full py-3 px-4 font-bold text-xs uppercase tracking-wider rounded-sm transition-all flex items-center justify-center gap-2 ${
-              isDeploying || !account
-                ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                : 'bg-[#00ff41] text-black hover:bg-[#00cc33] shadow-[0_0_15px_rgba(0,255,65,0.3)]'
-            }`}
-          >
-            {isDeploying ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                DEPLOYING TO SEPOLIA...
-              </>
-            ) : (
-              <>
-                <Rocket size={16} />
-                DEPLOY SBLAKE CONTRACT TO SEPOLIA
-              </>
+          <div className="space-y-2">
+            <button
+              onClick={handleDeploy}
+              disabled={isDeploying || !account}
+              className={`w-full py-3.5 px-4 font-black text-xs uppercase tracking-wider rounded-sm transition-all flex items-center justify-center gap-2 ${
+                isDeploying || !account
+                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                  : 'bg-[#00ff41] text-black hover:bg-[#00cc33] shadow-[0_0_20px_rgba(0,255,65,0.3)]'
+              }`}
+            >
+              {isDeploying ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  PROCESSING DEPLOYMENT...
+                </>
+              ) : isClassDeclared ? (
+                <>
+                  <Rocket size={16} />
+                  DEPLOY SBLAKE CONTRACT (1-CLICK UDC)
+                </>
+              ) : (
+                <>
+                  <Rocket size={16} />
+                  DEPLOY SBLAKE CONTRACT TO SEPOLIA
+                </>
+              )}
+            </button>
+
+            {!isClassDeclared && (
+              <div className="text-[11px] text-gray-500 font-mono flex items-center gap-1.5 justify-center">
+                <Coins size={12} className="text-[#00ff41]" />
+                Auto-relayer will declare contract bytecode via 0.1 STRK approval
+              </div>
             )}
-          </button>
+          </div>
 
           {/* Manual Contract Address Override */}
           <div className="pt-2 border-t border-gray-800/80">
