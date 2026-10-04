@@ -1,5 +1,6 @@
 import { Contract, RpcProvider, CallData } from 'starknet';
 import { createShieldedNote, saveNoteLocally } from './privacy';
+import sierraData from '../../contracts/target/dev/sblake_sblake.contract_class.json';
 
 // User-provided Alchemy RPC endpoints (v0_10)
 export const ALCHEMY_SEPOLIA_URL = "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/qXU4ta4yLmxUhIoLb-cZ7KtsNn808Pjw";
@@ -23,14 +24,78 @@ export const setNetwork = (network: 'sepolia' | 'mainnet') => {
   }
 };
 
-// Create RpcProvider with blockIdentifier 'latest' to comply with Alchemy v0_10 specs
 export const getActiveRpcUrl = () => {
   return CURRENT_NETWORK === 'mainnet' ? ALCHEMY_MAINNET_URL : ALCHEMY_SEPOLIA_URL;
 };
 
-export const provider = new RpcProvider({ 
-  nodeUrl: getActiveRpcUrl()
-});
+/**
+ * Creates an RpcProvider that automatically sanitizes 'pending' block identifiers
+ * to 'latest' so Alchemy v0_10 doesn't throw -32602 invalid param errors,
+ * and intercepts rate limits (-32029) to automatically fail over to alternate RPCs.
+ */
+export const createSanitizedProvider = (nodeUrl: string = getActiveRpcUrl()): RpcProvider => {
+  const p = new RpcProvider({ nodeUrl });
+  if (p.channel) {
+    const channelAny = p.channel as any;
+    const origFetchEndpoint = channelAny.fetchEndpoint.bind(p.channel);
+    channelAny.fetchEndpoint = async (method: any, params: any) => {
+      if (params && typeof params === 'object') {
+        if (params.block_id === 'pending') {
+          params.block_id = 'latest';
+        }
+        if (params.block_identifier === 'pending') {
+          params.block_identifier = 'latest';
+        }
+      }
+      try {
+        return await origFetchEndpoint(method, params);
+      } catch (err: any) {
+        // Automatic failover on OnFinality / rate limit errors
+        if (
+          err?.message?.includes('-32029') ||
+          err?.message?.includes('Too Many Requests') ||
+          err?.message?.includes('rate limit')
+        ) {
+          console.warn(`[Starknet RPC] Rate limit encountered on ${nodeUrl}, trying fallback...`);
+          for (const fbUrl of FALLBACK_SEPOLIA_URLS) {
+            if (fbUrl !== nodeUrl) {
+              try {
+                const fb = new RpcProvider({ nodeUrl: fbUrl });
+                return await (fb.channel as any).fetchEndpoint(method, params);
+              } catch {
+                // keep checking fallbacks
+              }
+            }
+          }
+        }
+        throw err;
+      }
+    };
+  }
+  return p;
+};
+
+// Global primary provider
+export const provider = createSanitizedProvider(getActiveRpcUrl());
+
+/**
+ * Binds our sanitized provider & channel to a connected wallet account
+ * to ensure wallet methods (declare, deployContract, execute) don't query
+ * the wallet extension's default OnFinality RPC or send 'pending' block IDs.
+ */
+export const bindAccountToCustomProvider = (account: any, customProvider: RpcProvider = provider) => {
+  if (!account) return account;
+  const target = account.account || account;
+  try {
+    if (customProvider.channel) {
+      target.channel = customProvider.channel;
+    }
+    target.provider = customProvider;
+  } catch (e) {
+    console.warn("[Starknet] Could not bind custom provider to account:", e);
+  }
+  return target;
+};
 
 // Configurable SBLAKE contract address (defaults to deployed contract or local override once set)
 export let CONTRACT_ADDRESS = typeof window !== 'undefined' && localStorage.getItem('sblake_custom_contract')
@@ -57,45 +122,22 @@ export interface EraInfo {
   totalMints: number;
 }
 
-const SBLAKE_ABI = [
-  {
-    name: "get_challenge",
-    type: "function",
-    inputs: [{ name: "user", type: "core::starknet::contract_address::ContractAddress" }],
-    outputs: [
-      { type: "core::integer::u64" },
-      { type: "core::integer::u256" },
-      { type: "core::integer::u256" },
-      { type: "core::integer::u32" },
-    ],
-    state_mutability: "view",
-  },
-  {
-    name: "balance_of",
-    type: "function",
-    inputs: [{ name: "account", type: "core::starknet::contract_address::ContractAddress" }],
-    outputs: [{ type: "core::integer::u256" }],
-    state_mutability: "view",
-  },
-  {
-    name: "get_era_info",
-    type: "function",
-    inputs: [],
-    outputs: [
-      { type: "core::integer::u8" },
-      { type: "core::integer::u256" },
-      { type: "core::integer::u64" },
-    ],
-    state_mutability: "view",
-  },
-];
+export interface TimelineStats {
+  era: number;
+  blockReward: string;
+  totalMints: number;
+  mintsInEra: number;
+  mintsUntilHalving: number;
+  totalSupply: string;
+  maxSupply: string;
+}
 
 export const getChallenge = async (address: string): Promise<ChallengeData> => {
   if (CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
     for (const nodeUrl of FALLBACK_SEPOLIA_URLS) {
       try {
-        const activeProvider = new RpcProvider({ nodeUrl });
-        const contract = new Contract(SBLAKE_ABI, CONTRACT_ADDRESS, activeProvider);
+        const activeProvider = createSanitizedProvider(nodeUrl);
+        const contract = new Contract(sierraData.abi, CONTRACT_ADDRESS, activeProvider);
         const res: any = await contract.get_challenge(address, { 
           parseResponse: true, 
           blockIdentifier: 'latest' 
@@ -122,12 +164,49 @@ export const getChallenge = async (address: string): Promise<ChallengeData> => {
   };
 };
 
+export const getTimelineStats = async (): Promise<TimelineStats> => {
+  if (CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+    for (const nodeUrl of FALLBACK_SEPOLIA_URLS) {
+      try {
+        const activeProvider = createSanitizedProvider(nodeUrl);
+        const contract = new Contract(sierraData.abi, CONTRACT_ADDRESS, activeProvider);
+        const res: any = await contract.get_timeline_stats({
+          parseResponse: true,
+          blockIdentifier: 'latest',
+        });
+        return {
+          era: Number(res[0]),
+          blockReward: (BigInt(res[1].toString()) / 10n ** 18n).toString(),
+          totalMints: Number(res[2]),
+          mintsInEra: Number(res[3]),
+          mintsUntilHalving: Number(res[4]),
+          totalSupply: (BigInt(res[5].toString()) / 10n ** 18n).toString(),
+          maxSupply: (BigInt(res[6].toString()) / 10n ** 18n).toString(),
+        };
+      } catch (err: any) {
+        console.warn(`[TimelineStats] Call failed on ${nodeUrl}:`, err?.message || err);
+      }
+    }
+  }
+
+  // Fallback defaults for Era 1
+  return {
+    era: 1,
+    blockReward: "100",
+    totalMints: 0,
+    mintsInEra: 0,
+    mintsUntilHalving: 100000,
+    totalSupply: "0",
+    maxSupply: "21000000",
+  };
+};
+
 export const getSBlakeBalance = async (address: string): Promise<string> => {
   if (CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
     for (const nodeUrl of FALLBACK_SEPOLIA_URLS) {
       try {
-        const activeProvider = new RpcProvider({ nodeUrl });
-        const contract = new Contract(SBLAKE_ABI, CONTRACT_ADDRESS, activeProvider);
+        const activeProvider = createSanitizedProvider(nodeUrl);
+        const contract = new Contract(sierraData.abi, CONTRACT_ADDRESS, activeProvider);
         const bal: any = await contract.balance_of(address, { 
           parseResponse: true, 
           blockIdentifier: 'latest' 
@@ -148,15 +227,16 @@ export const mintSBlake = async (
   brotherId?: string
 ) => {
   console.log(`[StarkBlake SDK] Submitting PoW solution. Shielded: ${shielded}, Nonce: ${nonce}`);
+  const activeAcc = bindAccountToCustomProvider(account, provider);
 
   if (shielded) {
     const baseReward = 100n * 10n ** 18n;
     const shieldedReward = (baseReward * 115n) / 100n; // +15% emission boost
-    const note = await createShieldedNote(account.address, shieldedReward);
+    const note = await createShieldedNote(activeAcc.address, shieldedReward);
     saveNoteLocally(note);
 
-    if (account && account.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
-      const tx = await account.execute({
+    if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+      const tx = await activeAcc.execute({
         contractAddress: CONTRACT_ADDRESS,
         entrypoint: "mint_shielded",
         calldata: CallData.compile({
@@ -176,8 +256,8 @@ export const mintSBlake = async (
   }
 
   // Standard Transparent Minting
-  if (account && account.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
-    const tx = await account.execute({
+  if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+    const tx = await activeAcc.execute({
       contractAddress: CONTRACT_ADDRESS,
       entrypoint: "mint",
       calldata: CallData.compile({
@@ -191,4 +271,18 @@ export const mintSBlake = async (
   return {
     transaction_hash: "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join(''),
   };
+};
+
+export const upgradeContract = async (account: any, newClassHash: string) => {
+  const activeAcc = bindAccountToCustomProvider(account, provider);
+  if (!activeAcc || !activeAcc.execute) {
+    throw new Error("Wallet not connected");
+  }
+  return await activeAcc.execute({
+    contractAddress: CONTRACT_ADDRESS,
+    entrypoint: "upgrade",
+    calldata: CallData.compile({
+      new_class_hash: newClassHash,
+    }),
+  });
 };

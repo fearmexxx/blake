@@ -238,7 +238,7 @@ const App: React.FC = () => {
             )}
 
             {/* 1-Click Sepolia Contract Deployer */}
-            <ContractDeployer account={wallet?.account || wallet} />
+            <ContractDeployer account={wallet?.account || wallet} wallet={wallet} />
 
             {/* Economic Flywheel & Feasibility Simulator */}
             <EconomicSimulator />

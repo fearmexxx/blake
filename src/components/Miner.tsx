@@ -1,7 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Play, Square, Activity, Cpu, Clock, Trophy, AlertTriangle, ShieldCheck, Eye, Sparkles } from 'lucide-react';
+import { 
+  Play, 
+  Square, 
+  Activity, 
+  Cpu, 
+  Clock, 
+  Trophy, 
+  AlertTriangle, 
+  ShieldCheck, 
+  Eye, 
+  Sparkles,
+  Layers,
+  Calendar,
+  Flame,
+  TrendingUp
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getChallenge, mintSBlake } from '../utils/starknet';
+import { getChallenge, mintSBlake, getTimelineStats, TimelineStats } from '../utils/starknet';
 import { getFingerprint } from '../utils/fingerprint';
 import { deriveViewingKey, getLocalNotes } from '../utils/privacy';
 
@@ -28,6 +43,17 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
   const [viewingKey, setViewingKey] = useState<string | null>(null);
   const [shieldedNotesCount, setShieldedNotesCount] = useState<number>(0);
 
+  // On-Chain Mining Timeline State
+  const [timeline, setTimeline] = useState<TimelineStats>({
+    era: 1,
+    blockReward: "100",
+    totalMints: 0,
+    mintsInEra: 0,
+    mintsUntilHalving: 100000,
+    totalSupply: "0",
+    maxSupply: "21000000",
+  });
+
   const workersRef = useRef<Worker[]>([]);
   const hashrateRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
@@ -37,17 +63,21 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
     getFingerprint().then(setFingerprint);
     deriveViewingKey(address).then(setViewingKey);
     setShieldedNotesCount(getLocalNotes().length);
-    fetchChallenge();
+    fetchData();
 
     return () => stopMining();
   }, [address]);
 
-  const fetchChallenge = async () => {
+  const fetchData = async () => {
     try {
-      const data = await getChallenge(address);
-      setChallenge(data);
+      const [challengeData, timelineData] = await Promise.all([
+        getChallenge(address),
+        getTimelineStats(),
+      ]);
+      setChallenge(challengeData);
+      setTimeline(timelineData);
     } catch {
-      setError("Failed to fetch challenge from Starknet.");
+      setError("Failed to fetch contract challenge & timeline from Starknet.");
     }
   };
 
@@ -117,109 +147,196 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
         setLastCommitment(res.commitment);
         setShieldedNotesCount(getLocalNotes().length);
       }
-      await fetchChallenge();
-    } catch {
-      setError("Transaction failed. Try again.");
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Failed to submit PoW solution to Starknet.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const eraProgressPercent = Math.min(
+    100,
+    Math.max(0, ((timeline.mintsInEra) / (timeline.mintsInEra + timeline.mintsUntilHalving || 100000)) * 100)
+  );
+
   return (
     <div className="space-y-6">
-      {/* Privacy Mode Banner */}
-      <div className="glass-panel p-4 flex flex-col sm:flex-row items-center justify-between gap-4 border border-[#00f3ff]/30 bg-[#00f3ff]/5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-sm bg-[#00f3ff]/10 border border-[#00f3ff]/40 flex items-center justify-center text-[#00f3ff]">
-            <ShieldCheck size={22} />
-          </div>
+      {/* Mining Control Core Card */}
+      <div className="glass-panel p-8 relative overflow-hidden border border-[#00ff41]/20">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm tracking-wide text-white">STRK20 PRIVACY POOL</span>
-              <span className="bg-[#00ff41]/20 text-[#00ff41] text-[10px] px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1">
-                <Sparkles size={10} /> +15% YIELD
-              </span>
-            </div>
-            <p className="text-xs text-gray-400">
-              {isShieldedMode 
-                ? "Mining directly into encrypted note commitments. Zero on-chain trace." 
-                : "Standard public minting. Tokens credited to public wallet address."}
-            </p>
-          </div>
-        </div>
-
-        <button
-          onClick={() => setIsShieldedMode(!isShieldedMode)}
-          className={`px-4 py-2 text-xs font-bold font-mono tracking-wider rounded transition-all ${
-            isShieldedMode 
-              ? 'bg-[#00f3ff] text-black shadow-[0_0_15px_rgba(0,243,255,0.4)]' 
-              : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-          }`}
-        >
-          {isShieldedMode ? "SHIELDED MINING: ACTIVE" : "TRANSPARENT MINING"}
-        </button>
-      </div>
-
-      {/* Miner Dashboard */}
-      <div className="glass-panel p-8 relative overflow-hidden">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-xs text-gray-500 uppercase tracking-widest font-mono">
-              <Activity size={14} />
-              Miner Engine
-            </div>
             <div className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-full ${isMining ? 'bg-[#00ff41] animate-pulse' : 'bg-red-500'}`} />
-              <span className="text-2xl font-black">{isMining ? 'MINING ACTIVE' : 'MINER STOPPED'}</span>
+              <span className="flex h-3 w-3 relative">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isMining ? 'bg-[#00ff41]' : 'bg-gray-500'}`} />
+                <span className={`relative inline-flex rounded-full h-3 w-3 ${isMining ? 'bg-[#00ff41]' : 'bg-gray-500'}`} />
+              </span>
+              <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+                CORE MINER
+                <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-gray-300 font-mono">
+                  ERA {timeline.era}
+                </span>
+              </h2>
             </div>
+            <p className="text-gray-400 text-sm mt-1">Blake2s Cairo-compatible multi-threaded hashing worker</p>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center bg-black rounded-sm border border-gray-800">
-              <div className="px-4 py-2 border-r border-gray-800 flex items-center gap-2">
-                <Cpu size={16} className="text-gray-500" />
-                <input 
-                  type="number" 
-                  value={threads} 
-                  min={1}
-                  max={32}
-                  onChange={(e) => setThreads(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="bg-transparent w-8 text-center outline-none font-bold"
-                  disabled={isMining}
-                />
-              </div>
-              <button 
-                onClick={isMining ? stopMining : startMining}
-                disabled={isSubmitting}
-                className={`px-8 py-3 font-bold transition-all flex items-center gap-2 ${
-                  isMining 
-                    ? 'text-red-500 hover:bg-red-500/10' 
-                    : 'text-[#00ff41] hover:bg-[#00ff41]/10'
-                }`}
+          <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+            {/* STRK20 Privacy Switch */}
+            <button
+              onClick={() => setIsShieldedMode(!isShieldedMode)}
+              className={`px-4 py-2 rounded-sm border text-xs font-bold font-mono transition-all flex items-center gap-2 ${
+                isShieldedMode
+                  ? 'bg-[#00f3ff]/10 border-[#00f3ff] text-[#00f3ff] shadow-[0_0_15px_rgba(0,243,255,0.2)]'
+                  : 'bg-black/40 border-gray-800 text-gray-400 hover:text-white'
+              }`}
+            >
+              <Sparkles size={14} />
+              {isShieldedMode ? "STRK20 SHIELDED (+15%)" : "TRANSPARENT MINT"}
+            </button>
+
+            {/* Threads Selector */}
+            <div className="flex items-center gap-2 bg-black/40 border border-gray-800 px-3 py-2 rounded-sm">
+              <Cpu size={16} className="text-gray-400" />
+              <span className="text-xs text-gray-400 font-mono">THREADS:</span>
+              <select 
+                value={threads} 
+                onChange={(e) => setThreads(Number(e.target.value))}
+                disabled={isMining}
+                className="bg-transparent text-sm font-mono text-white outline-none cursor-pointer"
               >
-                {isMining ? <><Square size={18} fill="currentColor" /> STOP</> : <><Play size={18} fill="currentColor" /> START</>}
-              </button>
+                {[1, 2, 4, 8, 16, 32].map(t => (
+                  <option key={t} value={t} className="bg-[#111]">{t}</option>
+                ))}
+              </select>
             </div>
+
+            {/* Start / Stop Trigger */}
+            <button
+              onClick={isMining ? stopMining : startMining}
+              disabled={isSubmitting}
+              className={`w-full md:w-auto px-8 py-3 rounded-sm font-black text-sm tracking-wider flex items-center justify-center gap-2 transition-all ${
+                isMining 
+                  ? 'bg-red-500 hover:bg-red-600 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]' 
+                  : 'bg-[#00ff41] hover:bg-[#00cc33] text-black shadow-[0_0_20px_rgba(0,255,65,0.4)]'
+              }`}
+            >
+              {isSubmitting ? (
+                <>SUBMITTING TX...</>
+              ) : isMining ? (
+                <><Square size={16} fill="currentColor" /> STOP MINING</>
+              ) : (
+                <><Play size={16} fill="currentColor" /> START MINING</>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Live Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12 pt-8 border-t border-gray-800">
-          <Metric label="Hashrate" value={`${(hashrate / 1000).toFixed(2)} KH/s`} subValue="BLAKE2s (Multi-core)" />
-          <Metric label="Total Hashes" value={totalHashes.toLocaleString()} subValue="THIS SESSION" />
-          <Metric label="Mint Yield" value={isShieldedMode ? "115 SBLAKE" : "100 SBLAKE"} subValue={isShieldedMode ? "+15% SHIELDED" : "ERA 1 BASE"} />
-          <Metric label="Daily Cap" value="0 / 10" subValue={brotherId ? "BROTHER 2X ACTIVE" : "STANDARD"} />
+        {/* Live Metrics Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8 pt-6 border-t border-gray-800">
+          <Metric label="Hashrate" value={`${(hashrate / 1000).toFixed(2)} KH/s`} subValue="Multi-core BLAKE2s" />
+          <Metric label="Total Hashes" value={totalHashes.toLocaleString()} subValue="Current Session" />
+          <Metric 
+            label="Mint Reward" 
+            value={`${isShieldedMode ? Math.floor(Number(timeline.blockReward) * 1.15) : timeline.blockReward} SBLAKE`} 
+            subValue={isShieldedMode ? "Era Base + 15% Shielded" : `Era ${timeline.era} Base Reward`} 
+          />
+          <Metric label="Anti-Sybil Cap" value={`${challenge?.mintsToday || 0} / 10`} subValue={brotherId ? "2x Brother Boost" : "Daily Limit"} />
         </div>
 
-        {/* Progress Bar */}
+        {/* Active Mining Pulse */}
         {isMining && (
           <motion.div 
             className="absolute bottom-0 left-0 h-1 bg-[#00ff41]"
             initial={{ width: 0 }}
             animate={{ width: "100%" }}
-            transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
           />
         )}
+      </div>
+
+      {/* Reworked On-Chain Mining Timeline Card */}
+      <div className="glass-panel p-6 border border-gray-800 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-800 pb-4">
+          <div className="flex items-center gap-2">
+            <Calendar size={18} className="text-[#00f3ff]" />
+            <h3 className="font-bold text-sm text-white uppercase tracking-wider">
+              On-Chain Mining Timeline & Halving Schedule
+            </h3>
+          </div>
+          <span className="text-xs font-mono text-gray-400 flex items-center gap-1.5">
+            <TrendingUp size={14} className="text-[#00ff41]" />
+            Halving Cadence: <strong className="text-white">Every 100,000 Mints</strong>
+          </span>
+        </div>
+
+        {/* Halving Progress Bar */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-xs font-mono">
+            <span className="text-gray-400">
+              Era {timeline.era} Progress ({timeline.mintsInEra.toLocaleString()} mints)
+            </span>
+            <span className="text-[#00f3ff] font-bold">
+              {timeline.mintsUntilHalving.toLocaleString()} mints until Era {timeline.era + 1} Halving
+            </span>
+          </div>
+          <div className="w-full bg-black/60 h-2.5 rounded-full overflow-hidden border border-gray-800">
+            <motion.div 
+              className="bg-gradient-to-r from-[#00ff41] to-[#00f3ff] h-full"
+              style={{ width: `${Math.max(2, eraProgressPercent)}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Multi-Era Schedule Breakdown */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+          <div className={`p-3 rounded border text-xs font-mono space-y-1 ${timeline.era === 1 ? 'border-[#00ff41] bg-[#00ff41]/5' : 'border-gray-800 bg-black/30'}`}>
+            <div className="flex items-center justify-between text-[11px] text-gray-400">
+              <span>ERA 1</span>
+              {timeline.era === 1 && <span className="text-[#00ff41] font-bold">CURRENT</span>}
+            </div>
+            <div className="text-base font-black text-white">100 SBLAKE</div>
+            <div className="text-[10px] text-gray-500">Mints 0 – 100k</div>
+          </div>
+
+          <div className={`p-3 rounded border text-xs font-mono space-y-1 ${timeline.era === 2 ? 'border-[#00ff41] bg-[#00ff41]/5' : 'border-gray-800 bg-black/30'}`}>
+            <div className="flex items-center justify-between text-[11px] text-gray-400">
+              <span>ERA 2</span>
+              {timeline.era === 2 && <span className="text-[#00ff41] font-bold">CURRENT</span>}
+            </div>
+            <div className="text-base font-black text-white">50 SBLAKE</div>
+            <div className="text-[10px] text-gray-500">Mints 100k – 200k</div>
+          </div>
+
+          <div className={`p-3 rounded border text-xs font-mono space-y-1 ${timeline.era === 3 ? 'border-[#00ff41] bg-[#00ff41]/5' : 'border-gray-800 bg-black/30'}`}>
+            <div className="flex items-center justify-between text-[11px] text-gray-400">
+              <span>ERA 3</span>
+              {timeline.era === 3 && <span className="text-[#00ff41] font-bold">CURRENT</span>}
+            </div>
+            <div className="text-base font-black text-white">25 SBLAKE</div>
+            <div className="text-[10px] text-gray-500">Mints 200k – 300k</div>
+          </div>
+
+          <div className={`p-3 rounded border text-xs font-mono space-y-1 ${timeline.era >= 4 ? 'border-[#00ff41] bg-[#00ff41]/5' : 'border-gray-800 bg-black/30'}`}>
+            <div className="flex items-center justify-between text-[11px] text-gray-400">
+              <span>ERA 4+</span>
+              {timeline.era >= 4 && <span className="text-[#00ff41] font-bold">CURRENT</span>}
+            </div>
+            <div className="text-base font-black text-white">12.5 SBLAKE</div>
+            <div className="text-[10px] text-gray-500">Halvings continue</div>
+          </div>
+        </div>
+
+        {/* Global Supply Status */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-xs text-gray-400 pt-1 font-mono gap-2">
+          <div>
+            Total Circulating: <strong className="text-white">{Number(timeline.totalSupply).toLocaleString()} SBLAKE</strong>
+          </div>
+          <div>
+            Max Supply Cap: <strong className="text-[#00f3ff]">21,000,000 SBLAKE</strong> (Hard Capped)
+          </div>
+        </div>
       </div>
 
       {/* Notifications & Success Telemetry */}
