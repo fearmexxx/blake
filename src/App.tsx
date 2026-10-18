@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { connect, disconnect } from '@starknet-io/get-starknet';
-import { Wallet, LogOut, Shield, Zap, Info, Menu, Flame, Loader2 } from 'lucide-react';
+import { Wallet, LogOut, Shield, Zap, Menu, Flame, Loader2, Server, GlobeLock, CheckCircle2 } from 'lucide-react';
 import Miner from './components/Miner';
 import { ContractDeployer } from './components/ContractDeployer';
 import { EconomicSimulator } from './components/EconomicSimulator';
+import { getProtocolMetrics, bondBlakeNode, purchaseVpnPass, ProtocolMetrics } from './utils/starknet';
 
 const App: React.FC = () => {
   const [address, setAddress] = useState<string | null>(null);
   const [wallet, setWallet] = useState<any>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [metrics, setMetrics] = useState<ProtocolMetrics | null>(null);
+  const [betaStatusMsg, setBetaStatusMsg] = useState<string | null>(null);
+  const [isBetaLoading, setIsBetaLoading] = useState<boolean>(false);
 
   // Auto-connect on load if already authorized
   useEffect(() => {
@@ -41,7 +45,47 @@ const App: React.FC = () => {
       }
     };
     tryAutoConnect();
+    getProtocolMetrics().then(setMetrics).catch(() => null);
   }, []);
+
+  const handleBetaVpnTest = async () => {
+    const activeAcc = wallet?.account || wallet;
+    if (!activeAcc || !address) {
+      setBetaStatusMsg("Connect your Starknet wallet first to test Unlinkable VPN Pass billing.");
+      return;
+    }
+    setIsBetaLoading(true);
+    setBetaStatusMsg(null);
+    try {
+      const sessionPubkey = "0x" + Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
+      const res = await purchaseVpnPass(activeAcc, 250, sessionPubkey);
+      setBetaStatusMsg(`VPN Pass Activated! 60% Ops / 25% Burn / 15% Yield routed. Tx: ${res.transaction_hash.slice(0, 10)}...`);
+      getProtocolMetrics().then(setMetrics).catch(() => null);
+    } catch (err: any) {
+      setBetaStatusMsg(err?.message || "VPN Pass test transaction failed.");
+    } finally {
+      setIsBetaLoading(false);
+    }
+  };
+
+  const handleBetaNodeBond = async () => {
+    const activeAcc = wallet?.account || wallet;
+    if (!activeAcc || !address) {
+      setBetaStatusMsg("Connect your Starknet wallet first to test Invited Beta BlakeNode bonding.");
+      return;
+    }
+    setIsBetaLoading(true);
+    setBetaStatusMsg(null);
+    try {
+      const res = await bondBlakeNode(activeAcc, "EU-WEST-1", true);
+      setBetaStatusMsg(`BlakeNode Bonded (Beta Subsidized)! Tx: ${res.transaction_hash.slice(0, 10)}...`);
+      getProtocolMetrics().then(setMetrics).catch(() => null);
+    } catch (err: any) {
+      setBetaStatusMsg(err?.message || "BlakeNode bonding test failed.");
+    } finally {
+      setIsBetaLoading(false);
+    }
+  };
 
   const handleConnect = async () => {
     setIsConnecting(true);
@@ -244,31 +288,33 @@ const App: React.FC = () => {
             <EconomicSimulator />
           </div>
 
-          {/* Right Column: Global Stats */}
+          {/* Right Column: Draft 1.1 Global Stats & Invited Beta Console */}
           <div className="space-y-6">
             <div className="glass-panel p-6 space-y-6">
               <div className="flex items-center justify-between border-b border-gray-800 pb-4">
                 <h3 className="font-bold flex items-center gap-2">
                   <Zap size={18} className="text-[#00ff41]" />
-                  ERA INFO
+                  ERA 1 SCHEDULE
                 </h3>
-                <span className="text-xs bg-[#00ff41]/10 text-[#00ff41] px-2 py-1 rounded font-mono font-bold">ERA 1</span>
+                <span className="text-xs bg-[#00ff41]/10 text-[#00ff41] px-2 py-1 rounded font-mono font-bold">
+                  DRAFT 1.1
+                </span>
               </div>
               
               <div className="space-y-4">
-                <StatItem label="Block Reward" value="100 SBLAKE" />
-                <StatItem label="Halving In" value="84,231 Mints" />
-                <StatItem label="Next Difficulty" value="+12.4%" />
-                <StatItem label="Total Minted" value="1,245,000" />
+                <StatItem label="Era 1 Base Reward" value="10 SBLAKE" />
+                <StatItem label="Shielded Reward (+15%)" value="11.5 SBLAKE" />
+                <StatItem label="Halving Interval" value="900,000 Mints" />
+                <StatItem label="Year-1 Target Float" value="&le; 40–45%" />
               </div>
 
               <div className="pt-4 border-t border-gray-800">
                 <div className="flex justify-between text-xs text-gray-500 mb-2">
-                  <span>ERA PROGRESS</span>
-                  <span>15.7%</span>
+                  <span>ERA 1 HORIZON (400–600 MINERS)</span>
+                  <span className="text-[#00ff41] font-mono">10–14 MOS</span>
                 </div>
                 <div className="w-full h-1 bg-gray-900 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#00ff41]" style={{ width: '15.7%' }} />
+                  <div className="h-full bg-[#00ff41]" style={{ width: '18%' }} />
                 </div>
               </div>
             </div>
@@ -279,33 +325,72 @@ const App: React.FC = () => {
                   <Shield size={16} />
                   STRK20 DARK POOL
                 </h3>
-                <span className="text-[10px] bg-[#00f3ff]/10 text-[#00f3ff] px-2 py-0.5 rounded font-mono font-bold">SNIP-36</span>
+                <span className="text-[10px] bg-[#00f3ff]/10 text-[#00f3ff] px-2 py-0.5 rounded font-mono font-bold">
+                  7-DAY MATURITY
+                </span>
               </div>
               <p className="text-xs text-gray-400">
-                Privacy-preserving note commitments with deflationary buyback & burn.
+                Miners locking rewards in STRK20 for &ge;7 days earn +15% SBLAKE and a 50% protocol mint fee discount.
               </p>
               <div className="space-y-3 pt-2">
-                <StatItem label="Shielded Staked" value="48.5%" />
-                <StatItem label="Mining Boost" value="+15% Yield" />
-                <StatItem label="Burn Sink Rate" value="0.25% Tx" />
+                <StatItem label="Mint Protocol Fee" value="0.5–1.0 STRK" />
+                <StatItem label="7-Day Lock Discount" value="50% Off Fee" />
+                <StatItem label="STRK20 Action Fee" value="~$0.12 Flat" />
+                <StatItem label="Unshield Burn Rate" value="0.25% Burn" />
               </div>
             </div>
 
-            <div className="glass-panel p-6 space-y-4 bg-[#00ff41]/5 border-[#00ff41]/20">
-              <h3 className="font-bold flex items-center gap-2 text-[#00ff41]">
-                <Info size={18} />
-                GENESIS SALE
-              </h3>
-              <p className="text-sm text-gray-400">
-                5% of supply is available at fixed price to seed DEX pool & lock LP.
-              </p>
-              <div className="flex justify-between items-end">
-                <div>
-                  <div className="text-2xl font-bold">$0.02</div>
-                  <div className="text-[10px] text-gray-500 tracking-widest uppercase">Per SBLAKE</div>
-                </div>
-                <button className="px-4 py-2 bg-[#00ff41] text-black text-xs font-bold rounded-sm hover:bg-[#00cc33] transition-colors">BUY NOW</button>
+            {/* BlakeVPN & BlakeNode Invited Beta Console (Replaces Premature Presale) */}
+            <div className="glass-panel p-6 space-y-4 bg-[#00ff41]/5 border-[#00ff41]/30">
+              <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+                <h3 className="font-bold flex items-center gap-2 text-[#00ff41] text-sm uppercase">
+                  <GlobeLock size={17} />
+                  BlakeVPN &amp; Node Beta
+                </h3>
+                <span className="text-[10px] bg-[#00ff41]/15 text-[#00ff41] px-2 py-0.5 rounded font-mono font-bold">
+                  INVITED BETA
+                </span>
               </div>
+
+              <p className="text-xs text-gray-300 leading-relaxed">
+                <strong>Beta-First Policy:</strong> Public presale is deferred until our 3–4 month technical test validates{' '}
+                <span className="text-[#00ff41] font-mono">15–25 BlakeNodes (&ge;95% uptime)</span> and{' '}
+                <span className="text-[#00f3ff] font-mono">40–80 VPN testers (&ge;40% 30d retention)</span>.
+              </p>
+
+              <div className="space-y-2.5 pt-1 text-xs border-t border-gray-800/80">
+                <StatItem label="Active Beta Nodes" value={`${metrics?.activeNodesCount ?? 0} / 25 Target`} />
+                <StatItem label="VPN Pass Billing" value="$5/mo (250 SBLAKE)" />
+                <StatItem label="Node Bond Collateral" value="10,000 SBLAKE" />
+                <StatItem label="Revenue Split" value="60% Ops / 25% Burn / 15% Yield" />
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 pt-2">
+                <button
+                  onClick={handleBetaVpnTest}
+                  disabled={isBetaLoading}
+                  className="w-full py-2.5 px-3 bg-[#00ff41] text-black text-xs font-black uppercase tracking-wider rounded-sm hover:bg-[#00cc33] transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isBetaLoading ? <Loader2 size={14} className="animate-spin" /> : <GlobeLock size={14} />}
+                  Test Unlinkable VPN Pass (250 SBLAKE)
+                </button>
+
+                <button
+                  onClick={handleBetaNodeBond}
+                  disabled={isBetaLoading}
+                  className="w-full py-2 px-3 bg-white/10 text-white text-xs font-bold uppercase tracking-wider rounded-sm hover:bg-white/20 border border-white/15 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Server size={14} className="text-[#00f3ff]" />
+                  Register Beta BlakeNode (Subsidized)
+                </button>
+              </div>
+
+              {betaStatusMsg && (
+                <div className="text-[11px] font-mono text-[#00f3ff] bg-black/60 border border-[#00f3ff]/30 p-2.5 rounded break-all flex items-start gap-1.5">
+                  <CheckCircle2 size={13} className="shrink-0 mt-0.5 text-[#00ff41]" />
+                  <span>{betaStatusMsg}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

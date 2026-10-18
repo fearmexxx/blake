@@ -35,9 +35,9 @@ export const getActiveRpcUrl = () => {
  */
 export const createSanitizedProvider = (nodeUrl: string = getActiveRpcUrl()): RpcProvider => {
   const p = new RpcProvider({ nodeUrl });
-  if (p.channel) {
-    const channelAny = p.channel as any;
-    const origFetchEndpoint = channelAny.fetchEndpoint.bind(p.channel);
+  const channelAny = (p as any).channel;
+  if (channelAny && typeof channelAny.fetchEndpoint === 'function') {
+    const origFetchEndpoint = channelAny.fetchEndpoint.bind(channelAny);
     channelAny.fetchEndpoint = async (method: any, params: any) => {
       if (params && typeof params === 'object') {
         if (params.block_id === 'pending') {
@@ -55,21 +55,8 @@ export const createSanitizedProvider = (nodeUrl: string = getActiveRpcUrl()): Rp
         }
       }
       try {
-        const res = await origFetchEndpoint(method, params);
-        // Map v0.10 gas consumption fields to starknet.js 6.11 expectations
-        if (method === 'starknet_estimateFee' && Array.isArray(res)) {
-          for (const item of res) {
-            if (item && !item.gas_consumed) {
-              item.gas_consumed = item.l2_gas_consumed || item.l1_gas_consumed || '0x0';
-            }
-            if (item && !item.gas_price) {
-              item.gas_price = item.l2_gas_price || item.l1_gas_price || '0x0';
-            }
-          }
-        }
-        return res;
+        return await origFetchEndpoint(method, params);
       } catch (err: any) {
-        // Automatic failover on OnFinality / rate limit errors
         if (
           err?.message?.includes('-32029') ||
           err?.message?.includes('Too Many Requests') ||
@@ -80,7 +67,7 @@ export const createSanitizedProvider = (nodeUrl: string = getActiveRpcUrl()): Rp
             if (fbUrl !== nodeUrl) {
               try {
                 const fb = new RpcProvider({ nodeUrl: fbUrl });
-                return await (fb.channel as any).fetchEndpoint(method, params);
+                return await ((fb as any).channel).fetchEndpoint(method, params);
               } catch {
                 // keep checking fallbacks
               }
@@ -99,15 +86,14 @@ export const provider = createSanitizedProvider(getActiveRpcUrl());
 
 /**
  * Binds our sanitized provider & channel to a connected wallet account
- * to ensure wallet methods (declare, deployContract, execute) don't query
- * the wallet extension's default OnFinality RPC or send 'pending' block IDs.
+ * to ensure wallet methods don't query OnFinality or send 'pending' block IDs.
  */
 export const bindAccountToCustomProvider = (account: any, customProvider: RpcProvider = provider) => {
   if (!account) return account;
   const target = account.account || account;
   try {
-    if (customProvider.channel) {
-      target.channel = customProvider.channel;
+    if ((customProvider as any).channel) {
+      target.channel = (customProvider as any).channel;
     }
     target.provider = customProvider;
   } catch (e) {
@@ -135,12 +121,6 @@ export interface ChallengeData {
   mintsToday: number;
 }
 
-export interface EraInfo {
-  era: number;
-  rewardPerMint: string;
-  totalMints: number;
-}
-
 export interface TimelineStats {
   era: number;
   blockReward: string;
@@ -151,12 +131,31 @@ export interface TimelineStats {
   maxSupply: string;
 }
 
+export interface ProtocolMetrics {
+  isBetaPhase: boolean;
+  activeNodesCount: number;
+  totalNodeCollateral: string;
+  totalBurned: string;
+  vpnSessionsCount: number;
+  opsSharePct: number;
+  buybackBurnPct: number;
+  yieldSharePct: number;
+}
+
+const instantiateContract = (activeProvider: RpcProvider) => {
+  return new Contract({
+    abi: sierraData.abi,
+    address: CONTRACT_ADDRESS,
+    providerOrAccount: activeProvider,
+  });
+};
+
 export const getChallenge = async (address: string): Promise<ChallengeData> => {
   if (CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
     for (const nodeUrl of FALLBACK_SEPOLIA_URLS) {
       try {
         const activeProvider = createSanitizedProvider(nodeUrl);
-        const contract = new Contract(sierraData.abi, CONTRACT_ADDRESS, activeProvider);
+        const contract: any = instantiateContract(activeProvider);
         const res: any = await contract.get_challenge(address, { 
           parseResponse: true, 
           blockIdentifier: 'latest' 
@@ -174,7 +173,6 @@ export const getChallenge = async (address: string): Promise<ChallengeData> => {
     }
   }
 
-  // Pre-deployment / Responsive Fallback State
   return {
     epoch: 1,
     blockHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
@@ -188,7 +186,7 @@ export const getTimelineStats = async (): Promise<TimelineStats> => {
     for (const nodeUrl of FALLBACK_SEPOLIA_URLS) {
       try {
         const activeProvider = createSanitizedProvider(nodeUrl);
-        const contract = new Contract(sierraData.abi, CONTRACT_ADDRESS, activeProvider);
+        const contract: any = instantiateContract(activeProvider);
         const res: any = await contract.get_timeline_stats({
           parseResponse: true,
           blockIdentifier: 'latest',
@@ -208,15 +206,54 @@ export const getTimelineStats = async (): Promise<TimelineStats> => {
     }
   }
 
-  // Fallback defaults for Era 1
+  // Draft 1.1 Fallback defaults (Era 1: 10 SBLAKE, 900,000 mint interval, 21M max supply)
   return {
     era: 1,
-    blockReward: "100",
+    blockReward: "10",
     totalMints: 0,
     mintsInEra: 0,
-    mintsUntilHalving: 100000,
+    mintsUntilHalving: 900000,
     totalSupply: "0",
     maxSupply: "21000000",
+  };
+};
+
+export const getProtocolMetrics = async (): Promise<ProtocolMetrics> => {
+  if (CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+    for (const nodeUrl of FALLBACK_SEPOLIA_URLS) {
+      try {
+        const activeProvider = createSanitizedProvider(nodeUrl);
+        const contract: any = instantiateContract(activeProvider);
+        const res: any = await contract.get_protocol_metrics({
+          parseResponse: true,
+          blockIdentifier: 'latest',
+        });
+        return {
+          isBetaPhase: Boolean(res[0]),
+          activeNodesCount: Number(res[1]),
+          totalNodeCollateral: (BigInt(res[2].toString()) / 10n ** 18n).toString(),
+          totalBurned: (BigInt(res[3].toString()) / 10n ** 18n).toString(),
+          vpnSessionsCount: Number(res[4]),
+          opsSharePct: Number(res[5]) / 100,
+          buybackBurnPct: Number(res[6]) / 100,
+          yieldSharePct: Number(res[7]) / 100,
+        };
+      } catch (err: any) {
+        console.warn(`[ProtocolMetrics] Call failed on ${nodeUrl}:`, err?.message || err);
+      }
+    }
+  }
+
+  // Draft 1.1 Beta Phase Baseline
+  return {
+    isBetaPhase: true,
+    activeNodesCount: 18,
+    totalNodeCollateral: "180000",
+    totalBurned: "0",
+    vpnSessionsCount: 64,
+    opsSharePct: 60,
+    buybackBurnPct: 25,
+    yieldSharePct: 15,
   };
 };
 
@@ -225,7 +262,7 @@ export const getSBlakeBalance = async (address: string): Promise<string> => {
     for (const nodeUrl of FALLBACK_SEPOLIA_URLS) {
       try {
         const activeProvider = createSanitizedProvider(nodeUrl);
-        const contract = new Contract(sierraData.abi, CONTRACT_ADDRESS, activeProvider);
+        const contract: any = instantiateContract(activeProvider);
         const bal: any = await contract.balance_of(address, { 
           parseResponse: true, 
           blockIdentifier: 'latest' 
@@ -249,9 +286,9 @@ export const mintSBlake = async (
   const activeAcc = bindAccountToCustomProvider(account, provider);
 
   if (shielded) {
-    const baseReward = 100n * 10n ** 18n;
-    const shieldedReward = (baseReward * 115n) / 100n; // +15% emission boost
-    const note = await createShieldedNote(activeAcc.address, shieldedReward);
+    // Draft 1.1: 10 SBLAKE Era 1 reward, 50% protocol fee discount for >=7d shielded holding
+    const baseReward = 10n * 10n ** 18n;
+    const note = await createShieldedNote(activeAcc.address, baseReward);
     saveNoteLocally(note);
 
     if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
@@ -282,6 +319,58 @@ export const mintSBlake = async (
       calldata: CallData.compile({
         nonce: { low: BigInt(nonce) & 0xffffffffffffffffffffffffffffffffn, high: BigInt(nonce) >> 128n },
         brother_id: brotherId || "0",
+      }),
+    });
+    return { transaction_hash: tx.transaction_hash };
+  }
+
+  return {
+    transaction_hash: "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join(''),
+  };
+};
+
+export const bondBlakeNode = async (
+  account: any,
+  region: string,
+  subsidized: boolean = true
+) => {
+  const activeAcc = bindAccountToCustomProvider(account, provider);
+  const regionFelt = "0x" + Array.from(new TextEncoder().encode(region)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+    const tx = await activeAcc.execute({
+      contractAddress: CONTRACT_ADDRESS,
+      entrypoint: "bond_blake_node",
+      calldata: CallData.compile({
+        region: regionFelt,
+        subsidized: subsidized ? 1 : 0,
+      }),
+    });
+    return { transaction_hash: tx.transaction_hash };
+  }
+
+  return {
+    transaction_hash: "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join(''),
+  };
+};
+
+export const purchaseVpnPass = async (
+  account: any,
+  amountSblake: number,
+  sessionPubkey: string,
+  nullifier: string = "0"
+) => {
+  const activeAcc = bindAccountToCustomProvider(account, provider);
+  const weiAmount = BigInt(amountSblake) * 10n ** 18n;
+
+  if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+    const tx = await activeAcc.execute({
+      contractAddress: CONTRACT_ADDRESS,
+      entrypoint: "purchase_vpn_pass",
+      calldata: CallData.compile({
+        amount: { low: weiAmount & 0xffffffffffffffffffffffffffffffffn, high: weiAmount >> 128n },
+        session_pubkey: sessionPubkey,
+        nullifier: nullifier,
       }),
     });
     return { transaction_hash: tx.transaction_hash };

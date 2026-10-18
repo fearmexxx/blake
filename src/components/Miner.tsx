@@ -43,13 +43,13 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
   const [viewingKey, setViewingKey] = useState<string | null>(null);
   const [shieldedNotesCount, setShieldedNotesCount] = useState<number>(0);
 
-  // On-Chain Mining Timeline State
+  // On-Chain Mining Timeline State (Draft 1.1: Era 1 = 10 SBLAKE, 900k mint interval)
   const [timeline, setTimeline] = useState<TimelineStats>({
     era: 1,
-    blockReward: "100",
+    blockReward: "10",
     totalMints: 0,
     mintsInEra: 0,
-    mintsUntilHalving: 100000,
+    mintsUntilHalving: 900000,
     totalSupply: "0",
     maxSupply: "21000000",
   });
@@ -158,7 +158,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
 
   const eraProgressPercent = Math.min(
     100,
-    Math.max(0, ((timeline.mintsInEra) / (timeline.mintsInEra + timeline.mintsUntilHalving || 100000)) * 100)
+    Math.max(0, ((timeline.mintsInEra) / (timeline.mintsInEra + timeline.mintsUntilHalving || 900000)) * 100)
   );
 
   return (
@@ -239,8 +239,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
           <Metric label="Total Hashes" value={totalHashes.toLocaleString()} subValue="Current Session" />
           <Metric 
             label="Mint Reward" 
-            value={`${isShieldedMode ? Math.floor(Number(timeline.blockReward) * 1.15) : timeline.blockReward} SBLAKE`} 
-            subValue={isShieldedMode ? "Era Base + 15% Shielded" : `Era ${timeline.era} Base Reward`} 
+            value={`${isShieldedMode ? (Number(timeline.blockReward) * 1.15).toFixed(2).replace(/\.00$/, '') : timeline.blockReward} SBLAKE`} 
+            subValue={isShieldedMode ? "+15% Shielded & 50% Fee Disc. (7d)" : `Era ${timeline.era} Base Reward`} 
           />
           <Metric label="Anti-Sybil Cap" value={`${challenge?.mintsToday || 0} / 10`} subValue={brotherId ? "2x Brother Boost" : "Daily Limit"} />
         </div>
@@ -262,12 +262,12 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
           <div className="flex items-center gap-2">
             <Calendar size={18} className="text-[#00f3ff]" />
             <h3 className="font-bold text-sm text-white uppercase tracking-wider">
-              On-Chain Mining Timeline & Halving Schedule
+              On-Chain Mining Timeline & Halving Schedule (Draft 1.1)
             </h3>
           </div>
           <span className="text-xs font-mono text-gray-400 flex items-center gap-1.5">
             <TrendingUp size={14} className="text-[#00ff41]" />
-            Halving Cadence: <strong className="text-white">Every 100,000 Mints</strong>
+            Halving Cadence: <strong className="text-white">Every 900,000 Mints (~10–14 Mos)</strong>
           </span>
         </div>
 
@@ -296,8 +296,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
               <span>ERA 1</span>
               {timeline.era === 1 && <span className="text-[#00ff41] font-bold">CURRENT</span>}
             </div>
-            <div className="text-base font-black text-white">100 SBLAKE</div>
-            <div className="text-[10px] text-gray-500">Mints 0 – 100k</div>
+            <div className="text-base font-black text-white">10 SBLAKE</div>
+            <div className="text-[10px] text-gray-500">0 – 900k Mints (~9M)</div>
           </div>
 
           <div className={`p-3 rounded border text-xs font-mono space-y-1 ${timeline.era === 2 ? 'border-[#00ff41] bg-[#00ff41]/5' : 'border-gray-800 bg-black/30'}`}>
@@ -305,8 +305,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
               <span>ERA 2</span>
               {timeline.era === 2 && <span className="text-[#00ff41] font-bold">CURRENT</span>}
             </div>
-            <div className="text-base font-black text-white">50 SBLAKE</div>
-            <div className="text-[10px] text-gray-500">Mints 100k – 200k</div>
+            <div className="text-base font-black text-white">5 SBLAKE</div>
+            <div className="text-[10px] text-gray-500">900k – 1.8M (~4.5M)</div>
           </div>
 
           <div className={`p-3 rounded border text-xs font-mono space-y-1 ${timeline.era === 3 ? 'border-[#00ff41] bg-[#00ff41]/5' : 'border-gray-800 bg-black/30'}`}>
@@ -314,8 +314,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
               <span>ERA 3</span>
               {timeline.era === 3 && <span className="text-[#00ff41] font-bold">CURRENT</span>}
             </div>
-            <div className="text-base font-black text-white">25 SBLAKE</div>
-            <div className="text-[10px] text-gray-500">Mints 200k – 300k</div>
+            <div className="text-base font-black text-white">2.5 SBLAKE</div>
+            <div className="text-[10px] text-gray-500">1.8M – 2.7M (~2.25M)</div>
           </div>
 
           <div className={`p-3 rounded border text-xs font-mono space-y-1 ${timeline.era >= 4 ? 'border-[#00ff41] bg-[#00ff41]/5' : 'border-gray-800 bg-black/30'}`}>
@@ -323,8 +323,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
               <span>ERA 4+</span>
               {timeline.era >= 4 && <span className="text-[#00ff41] font-bold">CURRENT</span>}
             </div>
-            <div className="text-base font-black text-white">12.5 SBLAKE</div>
-            <div className="text-[10px] text-gray-500">Halvings continue</div>
+            <div className="text-base font-black text-white">1.25 SBLAKE</div>
+            <div className="text-[10px] text-gray-500">Halvings to 0.3125</div>
           </div>
         </div>
 

@@ -30,9 +30,9 @@ import {
 } from '../utils/relayer';
 import sierraData from '../../contracts/target/dev/sblake_sblake.contract_class.json';
 
-// Pre-computed compiled Sierra class hash of contracts/src/sblake.cairo
-export const SBLAKE_SIERRA_CLASS_HASH = "0x3ddeba723665c7e488f6f85106cadb646101baa7c310be71741394efecd0f2f";
-export const SBLAKE_CASM_CLASS_HASH = "0x30f8a00a86afe3393a7d1d9829bc3e7648828c0229a424b530818d75a6cc606";
+// Pre-computed compiled Sierra class hash of contracts/src/sblake.cairo (Draft 1.1 Beta Spec)
+export const SBLAKE_SIERRA_CLASS_HASH = "0x1287c5cce2f2c41d3806c196ed87c58e0968e0cf0fd482b872621b54778e391";
+export const SBLAKE_CASM_CLASS_HASH = "0x71a32f7e84351096cba593526d2be781d995b2d0406e0d29aecc2dbea234b94";
 const UDC_ADDRESS = constants.UDC.ADDRESS;
 
 interface ContractDeployerProps {
@@ -80,7 +80,11 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
   // Load contract owner if deployed
   useEffect(() => {
     if (deployedAddress && !deployedAddress.startsWith("0x0123456789")) {
-      const contract = new Contract(sierraData.abi, deployedAddress, provider);
+      const contract = new Contract({
+        abi: sierraData.abi,
+        address: deployedAddress,
+        providerOrAccount: provider,
+      });
       contract.get_owner({ blockIdentifier: 'latest' })
         .then((owner: any) => {
           setContractOwner('0x' + BigInt(owner).toString(16));
@@ -92,10 +96,12 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
   const getEffectiveAccount = () => {
     if (wallet && typeof WalletAccount === 'function') {
       try {
-        const wa = new WalletAccount(provider, wallet);
-        if (wa) {
-          wa.channel = (provider as any).channel;
-          return wa;
+        const walletAddr = account?.address || wallet?.selectedAddress || wallet?.account?.address || '';
+        if (walletAddr) {
+          const wa = new WalletAccount({ provider, walletProvider: wallet, address: walletAddr });
+          if (wa) {
+            return wa;
+          }
         }
       } catch (err) {
         console.warn("[Deployer] WalletAccount creation fallback:", err);
@@ -278,7 +284,11 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
     setError(null);
 
     try {
-      const contract = new Contract(sierraData.abi, deployedAddress!, activeAcc);
+      const contract = new Contract({
+        abi: sierraData.abi,
+        address: deployedAddress!,
+        providerOrAccount: activeAcc,
+      });
       const res = await contract.set_halving_interval(intervalVal);
       setUpgradeSuccess(`Halving interval updated to ${intervalVal} mints! Tx: ${res.transaction_hash}`);
       setNewHalvingInterval('');

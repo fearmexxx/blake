@@ -1,4 +1,4 @@
-import { Account, RpcProvider, CallData } from 'starknet';
+import { Account, CallData } from 'starknet';
 import { provider, ALCHEMY_SEPOLIA_URL, createSanitizedProvider } from './starknet';
 import sierraData from '../../contracts/target/dev/sblake_sblake.contract_class.json';
 import casmData from '../../contracts/target/dev/sblake_sblake.compiled_contract_class.json';
@@ -6,7 +6,7 @@ import casmData from '../../contracts/target/dev/sblake_sblake.compiled_contract
 // OpenZeppelin standard account class hash on Starknet Sepolia
 export const OZ_ACCOUNT_CLASS_HASH = "0xd632f69c8e02ea43f1d8a7c3eb441c67eb935f460c02e3860f7c410115d10f";
 
-// Dedicated Sepolia Relayer Account
+// Dedicated Sepolia Relayer Account (Already deployed on Sepolia)
 export const RELAYER_CONFIG = {
   address: "0x35260a1162058d98cda528a7e7484195fda550acc5db70a840e0b89339a1f07",
   privateKey: "0x11643b24a2582fe3e7b6e3cebcab556b7086095b02f533a8ddfbfa94d2ff1b7",
@@ -48,17 +48,17 @@ export const isRelayerDeployed = async (): Promise<boolean> => {
 
 /**
  * Deploys the relayer account (if needed) and submits the DECLARE transaction
- * for the compiled SBLAKE contract class.
+ * for the compiled SBLAKE contract class using Starknet v8 V3 resource bounds.
  */
 export const deployRelayerAndDeclare = async (
   onProgress?: (status: string) => void
 ): Promise<string> => {
   const sanitizedProvider = createSanitizedProvider(ALCHEMY_SEPOLIA_URL);
-  const relayerAccount = new Account(
-    sanitizedProvider,
-    RELAYER_CONFIG.address,
-    RELAYER_CONFIG.privateKey
-  );
+  const relayerAccount = new Account({
+    provider: sanitizedProvider,
+    address: RELAYER_CONFIG.address,
+    signer: RELAYER_CONFIG.privateKey,
+  });
 
   // Step 1: Deploy relayer account if not yet active
   const alreadyDeployed = await isRelayerDeployed();
@@ -69,7 +69,7 @@ export const deployRelayerAndDeclare = async (
         classHash: OZ_ACCOUNT_CLASS_HASH,
         constructorCalldata: CallData.compile({ public_key_: RELAYER_CONFIG.publicKey }),
         addressSalt: RELAYER_CONFIG.publicKey,
-      }, { version: 3 });
+      });
 
       onProgress?.("Waiting for relayer deployment confirmation...");
       await sanitizedProvider.waitForTransaction(deployRes.transaction_hash);
@@ -86,7 +86,7 @@ export const deployRelayerAndDeclare = async (
   const declareRes = await relayerAccount.declare({
     contract: sierraData as any,
     casm: casmData as any,
-  }, { version: 3 });
+  });
 
   onProgress?.("Waiting for DECLARE transaction confirmation on Sepolia...");
   await sanitizedProvider.waitForTransaction(declareRes.transaction_hash);
