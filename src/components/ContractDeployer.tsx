@@ -29,10 +29,11 @@ import {
   deployRelayerAndDeclare 
 } from '../utils/relayer';
 import sierraData from '../../contracts/target/dev/sblake_sblake.contract_class.json';
+import casmData from '../../contracts/target/dev/sblake_sblake.compiled_contract_class.json';
 
 // Pre-computed compiled Sierra class hash of contracts/src/sblake.cairo (Draft 1.1 Beta Spec)
-export const SBLAKE_SIERRA_CLASS_HASH = "0x1287c5cce2f2c41d3806c196ed87c58e0968e0cf0fd482b872621b54778e391";
-export const SBLAKE_CASM_CLASS_HASH = "0x71a32f7e84351096cba593526d2be781d995b2d0406e0d29aecc2dbea234b94";
+export const SBLAKE_SIERRA_CLASS_HASH = "0x38c94007b9cf8bfaa7d9e12259a89d979e5df48d9fca8138f7d15a6db178a25";
+export const SBLAKE_CASM_CLASS_HASH = "0x7f0267821a43f89f7339c5e31f105a485b0a9ff0353df06970c395d37ad30e7";
 const UDC_ADDRESS = constants.UDC.ADDRESS;
 
 interface ContractDeployerProps {
@@ -140,36 +141,58 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
       }
 
       if (!declared) {
-        // Consumer wallets like Xverse do not implement wallet_addDeclareTransaction.
-        // We handle declaration automatically via our local relayer account.
-        const currentRelayerBal = await getRelayerBalance();
-        console.log("[Deployer] Current Relayer STRK balance:", currentRelayerBal);
-
-        if (currentRelayerBal < 50000000000000000n) { // < 0.05 STRK
-          setStep("Step 1/3: Approving 0.1 STRK in wallet to fund declaration relayer...");
-          
-          if (!activeAcc.execute) {
-            throw new Error("Connected wallet does not support execute transactions.");
+        // First try direct wallet declaration (works natively in Braavos & Argent X!)
+        let directDeclared = false;
+        if (typeof activeAcc.declareIfNot === 'function') {
+          try {
+            setStep("Step 1/2: Approving SBLAKE class declaration in wallet (Braavos / Argent X)...");
+            const decRes = await activeAcc.declareIfNot({
+              contract: sierraData as any,
+              casm: casmData as any,
+            });
+            if (decRes.transaction_hash) {
+              setStep("Waiting for class declaration confirmation on Sepolia...");
+              await provider.waitForTransaction(decRes.transaction_hash);
+            }
+            directDeclared = true;
+            setIsClassDeclared(true);
+          } catch (directErr: any) {
+            console.warn("[Deployer] Direct wallet declare not supported, falling back to relayer:", directErr?.message || directErr);
           }
-
-          // Transfer 0.1 STRK to the relayer
-          const transferTx = await activeAcc.execute({
-            contractAddress: STRK_TOKEN_ADDRESS,
-            entrypoint: "transfer",
-            calldata: CallData.compile({
-              recipient: RELAYER_CONFIG.address,
-              amount: { low: 100000000000000000n, high: 0n }, // 0.1 STRK
-            }),
-          });
-
-          setStep("Waiting for 0.1 STRK funding confirmation on Sepolia...");
-          await provider.waitForTransaction(transferTx.transaction_hash);
         }
 
-        // Relayer now has gas to deploy account (if needed) and declare SBLAKE class
-        setStep("Step 2/3: Relayer deploying on Sepolia and declaring SBLAKE Cairo class...");
-        await deployRelayerAndDeclare((msg) => setStep(`Step 2/3: ${msg}`));
-        setIsClassDeclared(true);
+        if (!directDeclared) {
+          // Consumer wallets like Xverse do not implement wallet_addDeclareTransaction.
+          // We handle declaration automatically via our local relayer account.
+          const currentRelayerBal = await getRelayerBalance();
+          console.log("[Deployer] Current Relayer STRK balance:", currentRelayerBal);
+
+          if (currentRelayerBal < 45000000000000000000n) { // < 45 STRK required for v0.14 L2 CASM compilation bounds
+            setStep("Step 1/3: Approving STRK in wallet to fund declaration relayer...");
+            
+            if (!activeAcc.execute) {
+              throw new Error("Connected wallet does not support execute transactions.");
+            }
+
+            // Transfer 46 STRK to the relayer to cover Starknet v0.14 L2 Sierra compilation gas bounds
+            const transferTx = await activeAcc.execute({
+              contractAddress: STRK_TOKEN_ADDRESS,
+              entrypoint: "transfer",
+              calldata: CallData.compile({
+                recipient: RELAYER_CONFIG.address,
+                amount: { low: 46000000000000000000n, high: 0n }, // 46 STRK
+              }),
+            });
+
+            setStep("Waiting for STRK funding confirmation on Sepolia...");
+            await provider.waitForTransaction(transferTx.transaction_hash);
+          }
+
+          // Relayer now has gas to deploy account (if needed) and declare SBLAKE class
+          setStep("Step 2/3: Relayer deploying on Sepolia and declaring SBLAKE Cairo class...");
+          await deployRelayerAndDeclare((msg) => setStep(`Step 2/3: ${msg}`));
+          setIsClassDeclared(true);
+        }
       }
 
       // Step 2: Deploy contract instance via UDC (Universal Deployer Contract)

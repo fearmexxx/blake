@@ -199,8 +199,8 @@ mod SBlake {
     fn constructor(ref self: ContractState) {
         let deployer = get_caller_address();
         self.owner.write(deployer);
-        // Initial Era 1 difficulty target
-        self.difficulty.write(0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffff);
+        // Initial Era 1 difficulty target (64 hex digits = 256 bits, 5 leading hex zeros = ~1.04M hashes)
+        self.difficulty.write(0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
         self.current_epoch.write(1);
         self.last_block_hash.write(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         self.era.write(1);

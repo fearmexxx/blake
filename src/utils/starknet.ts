@@ -161,10 +161,15 @@ export const getChallenge = async (address: string): Promise<ChallengeData> => {
           blockIdentifier: 'latest' 
         });
 
+        let rawDiffHex = BigInt(res[2]).toString(16);
+        // Safeguard: if an older contract stored a 55-hex-char value (missing 4 trailing f's), pad to 59 f's (20-bit PoW = ~1M hashes)
+        if (rawDiffHex.length === 55 && rawDiffHex.startsWith('fffff')) {
+          rawDiffHex = rawDiffHex + 'ffff';
+        }
         return {
           epoch: Number(res[0]),
-          blockHash: '0x' + BigInt(res[1]).toString(16),
-          difficulty: '0x' + BigInt(res[2]).toString(16),
+          blockHash: '0x' + BigInt(res[1]).toString(16).padStart(64, '0'),
+          difficulty: '0x' + rawDiffHex.padStart(64, '0'),
           mintsToday: Number(res[3]),
         };
       } catch (err: any) {
@@ -176,7 +181,7 @@ export const getChallenge = async (address: string): Promise<ChallengeData> => {
   return {
     epoch: 1,
     blockHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-    difficulty: "0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    difficulty: "0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     mintsToday: 0,
   };
 };
@@ -273,6 +278,9 @@ export const getSBlakeBalance = async (address: string): Promise<string> => {
       }
     }
   }
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('sblake_sim_public_balance') || "0";
+  }
   return "0";
 };
 
@@ -286,9 +294,9 @@ export const mintSBlake = async (
   const activeAcc = bindAccountToCustomProvider(account, provider);
 
   if (shielded) {
-    // Draft 1.1: 10 SBLAKE Era 1 reward, 50% protocol fee discount for >=7d shielded holding
-    const baseReward = 10n * 10n ** 18n;
-    const note = await createShieldedNote(activeAcc.address, baseReward);
+    // Draft 1.1: 10 SBLAKE Era 1 base + 15% STRK20 Shielded bonus = 11.5 SBLAKE
+    const shieldedRewardWei = 115n * 10n ** 17n; // 11.5 * 10^18
+    const note = await createShieldedNote(activeAcc?.address || "0x0", shieldedRewardWei);
     saveNoteLocally(note);
 
     if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
@@ -301,17 +309,18 @@ export const mintSBlake = async (
           encrypted_note: [note.salt, note.viewingKey],
         }),
       });
-      return { transaction_hash: tx.transaction_hash, commitment: note.commitment, note };
+      return { transaction_hash: tx.transaction_hash, commitment: note.commitment, note, isOnChain: true };
     }
 
     return {
       transaction_hash: "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join(''),
       commitment: note.commitment,
       note,
+      isOnChain: false,
     };
   }
 
-  // Standard Transparent Minting
+  // Standard Transparent Minting (10 SBLAKE Era 1)
   if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
     const tx = await activeAcc.execute({
       contractAddress: CONTRACT_ADDRESS,
@@ -321,11 +330,16 @@ export const mintSBlake = async (
         brother_id: brotherId || "0",
       }),
     });
-    return { transaction_hash: tx.transaction_hash };
+    return { transaction_hash: tx.transaction_hash, isOnChain: true };
   }
+
+  // Track local simulated transparent balance when no Sepolia contract is linked yet
+  const prevSim = Number(localStorage.getItem('sblake_sim_public_balance') || '0');
+  localStorage.setItem('sblake_sim_public_balance', (prevSim + 10).toString());
 
   return {
     transaction_hash: "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join(''),
+    isOnChain: false,
   };
 };
 
