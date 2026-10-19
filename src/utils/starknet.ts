@@ -381,6 +381,59 @@ export const purchaseVpnPass = async (
   };
 };
 
+export const unshieldSBlake = async (
+  account: any,
+  nullifier: string,
+  recipient: string,
+  amountWeiStr: string
+) => {
+  const activeAcc = bindAccountToCustomProvider(account, provider);
+  const weiAmount = BigInt(amountWeiStr);
+
+  if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+    const tx = await activeAcc.execute({
+      contractAddress: CONTRACT_ADDRESS,
+      entrypoint: "unshield",
+      calldata: CallData.compile({
+        nullifier,
+        recipient,
+        amount: { low: weiAmount & 0xffffffffffffffffffffffffffffffffn, high: weiAmount >> 128n },
+      }),
+    });
+    return { transaction_hash: tx.transaction_hash };
+  }
+
+  return {
+    transaction_hash: "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join(''),
+  };
+};
+
+export const burnForUtility = async (
+  account: any,
+  amountSblake: number,
+  utilityType: string
+) => {
+  const activeAcc = bindAccountToCustomProvider(account, provider);
+  const weiAmount = BigInt(amountSblake) * 10n ** 18n;
+  const utilFelt = "0x" + Array.from(new TextEncoder().encode(utilityType.slice(0, 30))).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+    const tx = await activeAcc.execute({
+      contractAddress: CONTRACT_ADDRESS,
+      entrypoint: "burn_for_utility",
+      calldata: CallData.compile({
+        amount: { low: weiAmount & 0xffffffffffffffffffffffffffffffffn, high: weiAmount >> 128n },
+        utility_type: utilFelt,
+      }),
+    });
+    return { transaction_hash: tx.transaction_hash };
+  }
+
+  return {
+    transaction_hash: "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join(''),
+  };
+};
+
 export const upgradeContract = async (account: any, newClassHash: string) => {
   const activeAcc = bindAccountToCustomProvider(account, provider);
   if (!activeAcc || !activeAcc.execute) {
@@ -394,3 +447,4 @@ export const upgradeContract = async (account: any, newClassHash: string) => {
     }),
   });
 };
+

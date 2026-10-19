@@ -83,10 +83,65 @@ export const saveNoteLocally = (note: ShieldedNote) => {
   }
 };
 
-export const getLocalNotes = (): Array<{ commitment: string; amount: string; salt: string; timestamp: number }> => {
+export interface StoredShieldedNote {
+  commitment: string;
+  amount: string;
+  salt: string;
+  owner?: string;
+  timestamp: number;
+  spent?: boolean;
+}
+
+export const getLocalNotes = (): Array<StoredShieldedNote> => {
   try {
     return JSON.parse(localStorage.getItem('sblake_shielded_notes') || '[]');
   } catch {
     return [];
   }
 };
+
+export const markNoteSpent = (commitment: string) => {
+  try {
+    const existing: StoredShieldedNote[] = getLocalNotes();
+    const updated = existing.map((n) =>
+      n.commitment === commitment ? { ...n, spent: true } : n
+    );
+    localStorage.setItem('sblake_shielded_notes', JSON.stringify(updated));
+  } catch (err) {
+    console.warn('Failed to mark shielded note as spent:', err);
+  }
+};
+
+export const computeNullifier = async (commitment: string, salt: string): Promise<string> => {
+  const encoder = new TextEncoder();
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    encoder.encode(`SBLAKE_NULLIFIER_V1:${commitment}:${salt}`)
+  );
+  const arr = Array.from(new Uint8Array(digest));
+  arr[0] &= 0x03;
+  return '0x' + arr.map((b) => b.toString(16).padStart(2, '0')).join('');
+};
+
+/**
+ * Helper for Invited Beta testers to seed a 7-day matured STRK20 note (250 SBLAKE)
+ * to test unlinkable BlakeVPN Pass activation & 50% mint fee discount immediately.
+ */
+export const seedBetaMaturedNote = async (ownerAddress: string): Promise<StoredShieldedNote> => {
+  const amountWei = 250n * 10n ** 18n;
+  const note = await createShieldedNote(ownerAddress, amountWei);
+  const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
+  const stored: StoredShieldedNote = {
+    commitment: note.commitment,
+    amount: amountWei.toString(),
+    salt: note.salt,
+    owner: ownerAddress,
+    timestamp: eightDaysAgo,
+    spent: false,
+  };
+  const existing = getLocalNotes();
+  existing.unshift(stored);
+  localStorage.setItem('sblake_shielded_notes', JSON.stringify(existing));
+  return stored;
+};
+

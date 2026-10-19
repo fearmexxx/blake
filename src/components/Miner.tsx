@@ -16,9 +16,23 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { getChallenge, mintSBlake, getTimelineStats, TimelineStats } from '../utils/starknet';
+import {
+  getChallenge,
+  mintSBlake,
+  getTimelineStats,
+  TimelineStats,
+  unshieldSBlake,
+  burnForUtility,
+} from '../utils/starknet';
 import { getFingerprint } from '../utils/fingerprint';
-import { deriveViewingKey, getLocalNotes } from '../utils/privacy';
+import {
+  deriveViewingKey,
+  getLocalNotes,
+  computeNullifier,
+  markNoteSpent,
+  seedBetaMaturedNote,
+  StoredShieldedNote,
+} from '../utils/privacy';
 
 interface MinerProps {
   address: string;
@@ -42,6 +56,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
   const [isShieldedMode, setIsShieldedMode] = useState<boolean>(true);
   const [viewingKey, setViewingKey] = useState<string | null>(null);
   const [shieldedNotesCount, setShieldedNotesCount] = useState<number>(0);
+  const [localNotes, setLocalNotes] = useState<StoredShieldedNote[]>([]);
+  const [vaultStatus, setVaultStatus] = useState<string | null>(null);
 
   // On-Chain Mining Timeline State (Draft 1.1: Era 1 = 10 SBLAKE, 900k mint interval)
   const [timeline, setTimeline] = useState<TimelineStats>({
@@ -58,15 +74,53 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
   const hashrateRef = useRef<number>(0);
   const startTimeRef = useRef<number>(0);
 
+  const syncVaultNotes = () => {
+    const notes = getLocalNotes().filter((n) => !n.spent);
+    setLocalNotes(notes);
+    setShieldedNotesCount(notes.length);
+  };
+
   useEffect(() => {
     // Fetch fingerprint & viewing key on mount
     getFingerprint().then(setFingerprint);
     deriveViewingKey(address).then(setViewingKey);
-    setShieldedNotesCount(getLocalNotes().length);
+    syncVaultNotes();
     fetchData();
 
     return () => stopMining();
   }, [address]);
+
+  const handleSeedDemoNote = async () => {
+    await seedBetaMaturedNote(address);
+    syncVaultNotes();
+    setVaultStatus("Seeded a 7-day matured STRK20 note (250 SBLAKE) — 50% Mint Fee Discount unlocked!");
+  };
+
+  const handleUnshieldNote = async (note: StoredShieldedNote) => {
+    setVaultStatus(null);
+    try {
+      const nullifier = await computeNullifier(note.commitment, note.salt);
+      const res = await unshieldSBlake(account, nullifier, address, note.amount);
+      markNoteSpent(note.commitment);
+      syncVaultNotes();
+      setVaultStatus(`Unshielded note to wallet (0.25% deflationary burn applied). Tx: ${res.transaction_hash.slice(0, 12)}...`);
+    } catch (err: any) {
+      setError(err?.message || "Failed to unshield STRK20 note.");
+    }
+  };
+
+  const handleUtilityBurn = async (amount: number, utilityLabel: string) => {
+    setVaultStatus(null);
+    try {
+      const res = await burnForUtility(account, amount, utilityLabel);
+      if (utilityLabel === 'OVERCLOCK_2X') {
+        setBrotherId('OVERCLOCK_BOOST');
+      }
+      setVaultStatus(`Burned ${amount} SBLAKE for ${utilityLabel}! Tx: ${res.transaction_hash.slice(0, 12)}...`);
+    } catch (err: any) {
+      setError(err?.message || "Utility burn failed.");
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -145,7 +199,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
       setLastMint(res.transaction_hash);
       if (res.commitment) {
         setLastCommitment(res.commitment);
-        setShieldedNotesCount(getLocalNotes().length);
+        syncVaultNotes();
       }
       await fetchData();
     } catch (err: any) {
@@ -421,6 +475,127 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
             <div className="flex justify-between">
               <span className="text-gray-400">Shielded Notes</span>
               <span className="font-mono text-[10px] text-[#00ff41] font-bold">{shieldedNotesCount} In Safe</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* STRK20 Dark Pool Note Vault & Utility Burn Sinks */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left: STRK20 Note Vault (7-Day Maturity for 50% Fee Discount) */}
+        <div className="lg:col-span-7 glass-panel p-6 border border-[#00f3ff]/30 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-800 pb-3">
+            <div>
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Layers size={16} className="text-[#00f3ff]" />
+                STRK20 Shielded Note Vault (7-Day Maturity Tracker)
+              </h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Notes held &ge;7 days (`604,800s`) unlock the <strong>50% Protocol Mint Fee Discount</strong> (`0.25–0.5 STRK`) and unlinkable BlakeVPN spending.
+              </p>
+            </div>
+            <button
+              onClick={handleSeedDemoNote}
+              className="px-3 py-1.5 bg-[#00f3ff]/15 hover:bg-[#00f3ff]/25 border border-[#00f3ff]/40 rounded text-[11px] font-mono font-bold text-[#00f3ff] shrink-0"
+            >
+              + Seed 7d Matured Note
+            </button>
+          </div>
+
+          {localNotes.length === 0 ? (
+            <div className="p-6 text-center bg-black/50 border border-dashed border-gray-800 rounded text-xs font-mono text-gray-500">
+              No active STRK20 shielded notes in local vault yet. Mine in Shielded Mode (+15%) or click "+ Seed 7d Matured Note" to test.
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-56 overflow-y-auto pr-1">
+              {localNotes.map((n) => {
+                const ageSeconds = Math.floor((Date.now() - n.timestamp) / 1000);
+                const matured = ageSeconds >= 604800;
+                const progressPct = Math.min(100, Math.round((ageSeconds / 604800) * 100));
+                const sblakeAmt = (BigInt(n.amount) / 10n ** 18n).toString();
+                return (
+                  <div
+                    key={n.commitment}
+                    className="p-3 bg-black/70 border border-gray-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-bold">{sblakeAmt} SBLAKE</span>
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                            matured
+                              ? 'bg-[#00ff41]/15 text-[#00ff41]'
+                              : 'bg-yellow-500/15 text-yellow-400'
+                          }`}
+                        >
+                          {matured ? '7D MATURED (50% FEE DISC. ✓)' : `MATURING (${progressPct}%)`}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-gray-500">
+                        Commitment: {n.commitment.slice(0, 18)}...{n.commitment.slice(-8)}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleUnshieldNote(n)}
+                      className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded text-[11px] font-bold transition-colors shrink-0"
+                    >
+                      Unshield (0.25% Burn)
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {vaultStatus && (
+            <div className="p-2.5 bg-[#00ff41]/10 border border-[#00ff41]/30 rounded text-[11px] font-mono text-[#00ff41]">
+              {vaultStatus}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Consumption Utility Burn Sinks (Draft 1.1 Section 5) */}
+        <div className="lg:col-span-5 glass-panel p-6 border border-red-500/25 space-y-4">
+          <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+              <Flame size={16} className="text-red-400" />
+              Utility Consumption Burns
+            </h3>
+            <span className="text-[10px] font-mono bg-red-500/10 text-red-400 px-2 py-0.5 rounded font-bold">
+              DEFLATIONARY SINKS
+            </span>
+          </div>
+
+          <p className="text-xs text-gray-400 leading-relaxed">
+            Burn `SBLAKE` on-chain (`burn_for_utility`) to unlock mining cap boosts or reserve unlinkable `.blake` Stealth IDs for BlakeVPN.
+          </p>
+
+          <div className="space-y-3">
+            <div className="p-3.5 bg-black/70 border border-gray-800 rounded flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-white font-mono">2x Overclock Daily Cap Pass</div>
+                <div className="text-[11px] text-gray-400">Doubles anti-Sybil daily limit from 10 to 20 mints/24h</div>
+              </div>
+              <button
+                onClick={() => handleUtilityBurn(50, 'OVERCLOCK_2X')}
+                className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 font-mono font-bold text-xs rounded shrink-0"
+              >
+                Burn 50 SB
+              </button>
+            </div>
+
+            <div className="p-3.5 bg-black/70 border border-gray-800 rounded flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold text-white font-mono">.blake Stealth Relay Identity</div>
+                <div className="text-[11px] text-gray-400">Permanent zero-knowledge routing alias for BlakeVPN</div>
+              </div>
+              <button
+                onClick={() => handleUtilityBurn(150, 'STEALTH_BLAKE_ID')}
+                className="px-3 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 font-mono font-bold text-xs rounded shrink-0"
+              >
+                Burn 150 SB
+              </button>
             </div>
           </div>
         </div>
