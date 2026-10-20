@@ -19,6 +19,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   getChallenge,
   mintSBlake,
+  batchSettleMinedBlocks,
+  QueuedBlockProof,
   getTimelineStats,
   TimelineStats,
   unshieldSBlake,
@@ -74,6 +76,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
   const [lastWinningHash, setLastWinningHash] = useState<string | null>(null);
   const [lastMintOnChain, setLastMintOnChain] = useState<boolean>(false);
   const [blocksMinedSession, setBlocksMinedSession] = useState<number>(0);
+  const [minedBlocksFeed, setMinedBlocksFeed] = useState<QueuedBlockProof[]>([]);
+  const [autoSignPerBlock, setAutoSignPerBlock] = useState<boolean>(false);
   const [bestHashSoFar, setBestHashSoFar] = useState<string | null>(null);
   const [publicBalance, setPublicBalance] = useState<string>('0');
   const [shieldedBalanceTotal, setShieldedBalanceTotal] = useState<number>(0);
@@ -102,6 +106,17 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
   const intervalRef = useRef<any>(null);
   const hashrateRef = useRef<number>(0);
   const bestHashBigRef = useRef<bigint | null>(null);
+  const roundRef = useRef<number>(1);
+  const isShieldedRef = useRef<boolean>(isShieldedMode);
+  const autoSignRef = useRef<boolean>(autoSignPerBlock);
+
+  useEffect(() => {
+    isShieldedRef.current = isShieldedMode;
+  }, [isShieldedMode]);
+
+  useEffect(() => {
+    autoSignRef.current = autoSignPerBlock;
+  }, [autoSignPerBlock]);
 
   const syncVaultNotes = () => {
     const notes = getLocalNotes().filter((n) => !n.spent);
@@ -172,6 +187,16 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
 
   const activeTargetDifficulty = DIFFICULTY_PRESETS[difficultyPreset].targetHex;
 
+  const handleDifficultyChange = (preset: 'fast' | 'standard' | 'hard') => {
+    setDifficultyPreset(preset);
+    const newTarget = DIFFICULTY_PRESETS[preset].targetHex;
+    bestHashBigRef.current = null;
+    setBestHashSoFar(null);
+    workersRef.current.forEach((w) => {
+      w.postMessage({ type: 'UPDATE_DIFFICULTY', difficulty: newTarget });
+    });
+  };
+
   const startMining = () => {
     if (!challenge) return;
     setError(null);
@@ -182,7 +207,6 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
     
     const numThreads = threads;
     const workers: Worker[] = [];
-    // Add random session offset so repeated runs don't re-hash the exact same nonces
     const randomOffset = BigInt(Math.floor(Math.random() * 100000000));
     
     for (let i = 0; i < numThreads; i++) {
@@ -192,7 +216,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
       
       worker.onmessage = (e) => {
         if (e.data.type === 'SUCCESS') {
-          handleSuccess(e.data.nonce, e.data.hash);
+          handleSuccess(e.data.nonce, e.data.hash, e.data.round);
         } else if (e.data.type === 'PROGRESS') {
           hashrateRef.current += e.data.iterations;
           setTotalHashes(prev => prev + e.data.iterations);
@@ -211,6 +235,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
         epoch: challenge.epoch,
         blockHash: challenge.blockHash,
         difficulty: activeTargetDifficulty,
+        round: roundRef.current,
         startNonce: (randomOffset + BigInt(i)).toString(),
         step: numThreads.toString(),
         brotherId: brotherId
@@ -239,25 +264,84 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
     setHashrate(0);
   };
 
-  const handleSuccess = async (nonce: string, winningHash: string) => {
-    stopMining();
+  // Continuous Auto-Mining: DO NOT stop workers when a block is found!
+  // Advance to the next round across all workers and credit the mined block immediately.
+  const handleSuccess = async (nonce: string, winningHash: string, solvedRound?: number) => {
+    if (solvedRound && solvedRound < roundRef.current) {
+      return; // Another thread already solved this round
+    }
+    const completedRound = roundRef.current;
+    roundRef.current += 1;
+    bestHashBigRef.current = null;
+
+    // Broadcast NEW_ROUND to all active workers so they keep mining non-stop
+    workersRef.current.forEach((w) => {
+      w.postMessage({
+        type: 'NEW_ROUND',
+        round: roundRef.current,
+        difficulty: DIFFICULTY_PRESETS[difficultyPreset].targetHex,
+      });
+    });
+
     setLastWinningNonce(nonce);
     setLastWinningHash(winningHash);
     setBestHashSoFar(winningHash);
-    setIsSubmitting(true);
+
+    const shieldedNow = isShieldedRef.current;
     try {
-      const res: any = await mintSBlake(account, nonce, isShieldedMode, brotherId || undefined);
+      const res: any = await mintSBlake(
+        account,
+        nonce,
+        shieldedNow,
+        brotherId || undefined,
+        autoSignRef.current
+      );
       setLastMint(res.transaction_hash);
       setLastMintOnChain(Boolean(res.isOnChain));
       setBlocksMinedSession((prev) => prev + 1);
       if (res.commitment) {
         setLastCommitment(res.commitment);
       }
+
+      const proofEntry: QueuedBlockProof = {
+        round: completedRound,
+        nonce,
+        hash: winningHash,
+        shielded: shieldedNow,
+        rewardSblake: shieldedNow ? 11.5 : 10,
+        commitment: res.commitment,
+        salt: res.note?.salt,
+        viewingKey: res.note?.viewingKey,
+        brotherId: brotherId || undefined,
+        timestamp: Date.now(),
+        settledOnChain: Boolean(res.isOnChain),
+        txHash: res.transaction_hash,
+      };
+      setMinedBlocksFeed((prev) => [proofEntry, ...prev.slice(0, 49)]);
+
       syncVaultNotes();
-      await fetchData();
+      setPublicBalance(await getSBlakeBalance(address));
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Failed to submit PoW solution to Starknet.");
+      setError(err.message || "Failed to record PoW solution.");
+    }
+  };
+
+  const handleBatchClaimOnChain = async () => {
+    const unsettled = minedBlocksFeed.filter((b) => !b.settledOnChain);
+    if (unsettled.length === 0) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      const res = await batchSettleMinedBlocks(account, unsettled);
+      setLastMint(res.transaction_hash);
+      setLastMintOnChain(true);
+      setMinedBlocksFeed((prev) =>
+        prev.map((b) => ({ ...b, settledOnChain: true, txHash: res.transaction_hash }))
+      );
+      await fetchData();
+    } catch (err: any) {
+      setError(err?.message || "Batch multicall claim failed.");
     } finally {
       setIsSubmitting(false);
     }
@@ -332,11 +416,11 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
               }`}
             >
               {isSubmitting ? (
-                <>SUBMITTING TX...</>
+                <>SETTLING ON-CHAIN...</>
               ) : isMining ? (
-                <><Square size={16} fill="currentColor" /> STOP MINING</>
+                <><Square size={16} fill="currentColor" /> STOP AUTO-MINING</>
               ) : (
-                <><Play size={16} fill="currentColor" /> START MINING</>
+                <><Play size={16} fill="currentColor" /> START AUTO-MINING</>
               )}
             </button>
           </div>
@@ -344,7 +428,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
 
         {/* Live Metrics Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8 pt-6 border-t border-gray-800">
-          <Metric label="Hashrate" value={`${(hashrate / 1000).toFixed(2)} KH/s`} subValue="Multi-core BLAKE2s" />
+          <Metric label="Hashrate" value={`${(hashrate / 1000).toFixed(2)} KH/s`} subValue="Multi-core BLAKE2s (Continuous)" />
           <Metric label="Total Hashes" value={totalHashes.toLocaleString()} subValue="Real Session Hashes" />
           <Metric 
             label="Your Mined SBLAKE" 
@@ -352,9 +436,9 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
             subValue={`🔒 ${shieldedBalanceTotal.toFixed(1)} Shielded | 💳 ${publicBalance} Public`} 
           />
           <Metric
-            label="Session Blocks Found"
+            label="Auto-Mined Blocks"
             value={`${blocksMinedSession} Blocks`}
-            subValue={`+${isShieldedMode ? '11.5' : '10'} SBLAKE / Block`}
+            subValue={`+${isShieldedMode ? '11.5' : '10'} SBLAKE / Block (Non-Stop)`}
           />
         </div>
 
@@ -363,15 +447,23 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="text-xs font-mono font-bold text-[#00f3ff] uppercase flex items-center gap-2">
               <Activity size={14} className={isMining ? 'animate-pulse text-[#00ff41]' : 'text-[#00f3ff]'} />
-              Live Proof-of-Work Hash Verification (Hash &lt; Target)
+              Continuous Auto-Miner Hash Inspector (Round #{roundRef.current})
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-mono">
-              <span className="text-gray-400">PoW Target Difficulty:</span>
+            <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
+              <label className="flex items-center gap-1.5 text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoSignPerBlock}
+                  onChange={(e) => setAutoSignPerBlock(e.target.checked)}
+                  className="accent-[#00ff41]"
+                />
+                <span>Prompt Wallet Every Block</span>
+              </label>
+
               <select
                 value={difficultyPreset}
-                onChange={(e) => setDifficultyPreset(e.target.value as 'fast' | 'standard' | 'hard')}
-                disabled={isMining}
+                onChange={(e) => handleDifficultyChange(e.target.value as 'fast' | 'standard' | 'hard')}
                 className="bg-black/80 border border-gray-700 text-[#00ff41] px-2.5 py-1 rounded text-xs font-mono outline-none cursor-pointer"
               >
                 <option value="fast">⚡ 16-Bit Fast Verify (~65k hashes / 1–3 sec)</option>
@@ -389,20 +481,15 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <span className="text-gray-400 shrink-0">Best Hash Found:</span>
               <span className="text-[#00ff41] break-all">
-                {bestHashSoFar || '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff (Click START MINING)'}
+                {bestHashSoFar || '0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff (Click START AUTO-MINING)'}
               </span>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-800/80 text-[10px] text-gray-400">
               <span>
-                Expected Hashes per Block: <strong className="text-white">{DIFFICULTY_PRESETS[difficultyPreset].avgHashes}</strong>
+                Auto-Mode: <strong className="text-[#00ff41]">CONTINUOUS (Never stops on block found)</strong>
               </span>
               <span>
-                Execution Mode:{' '}
-                <strong className={isLiveSepoliaContract ? 'text-[#00ff41]' : 'text-[#00f3ff]'}>
-                  {isLiveSepoliaContract
-                    ? `Live Sepolia Contract (${CONTRACT_ADDRESS.slice(0, 10)}...)`
-                    : 'Local STRK20 Safe + Simulated Mint (Deploy Contract in Status Tab for On-Chain Tx)'}
-                </strong>
+                Expected Hashes / Block: <strong className="text-white">{DIFFICULTY_PRESETS[difficultyPreset].avgHashes}</strong>
               </span>
             </div>
           </div>
@@ -419,7 +506,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
         )}
       </div>
 
-      {/* Notifications & Mathematical Proof Verification Receipt */}
+      {/* Notifications & Live Auto-Mined Blocks Stream */}
       <AnimatePresence>
         {error && (
           <motion.div 
@@ -433,62 +520,57 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
           </motion.div>
         )}
         
-        {lastMint && (
+        {minedBlocksFeed.length > 0 && (
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-[#00ff41]/10 border border-[#00ff41]/40 p-5 rounded-sm text-[#00ff41] space-y-3 text-xs font-mono"
+            className="bg-[#00ff41]/5 border border-[#00ff41]/30 p-5 rounded-sm space-y-3 text-xs font-mono"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#00ff41]/20 pb-2.5">
-              <div className="flex items-center gap-2 font-bold text-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#00ff41]/20 pb-3">
+              <div className="flex items-center gap-2 font-bold text-sm text-[#00ff41]">
                 <Trophy size={18} />
                 <span>
-                  BLOCK MINED! +{isShieldedMode ? '11.50' : '10.00'} SBLAKE CREDITED ({isShieldedMode ? 'STRK20 Shielded Vault' : 'Public Balance'})
+                  LIVE AUTO-MINED BLOCK STREAM ({minedBlocksFeed.length} BLOCKS SOLVED — MINER RUNNING NON-STOP)
                 </span>
               </div>
-              <span className="px-2 py-0.5 rounded bg-[#00ff41]/20 text-[#00ff41] text-[10px] font-bold">
-                PoW HASH &lt; TARGET VERIFIED ✓
-              </span>
+
+              {minedBlocksFeed.some((b) => !b.settledOnChain) && (
+                <button
+                  onClick={handleBatchClaimOnChain}
+                  disabled={isSubmitting}
+                  className="px-3.5 py-1.5 bg-[#00ff41] hover:bg-[#00cc33] text-black font-black text-[11px] uppercase rounded-sm transition-colors shrink-0"
+                >
+                  {isSubmitting
+                    ? 'SETTLING MULTICALL...'
+                    : `Batch Settle ${minedBlocksFeed.filter((b) => !b.settledOnChain).length} Blocks On-Chain (1-Click)`}
+                </button>
+              )}
             </div>
 
-            <div className="space-y-1.5 text-[11px] bg-black/60 p-3 rounded border border-gray-800 text-gray-300">
-              <div>
-                <span className="text-gray-500">Winning Nonce: </span>
-                <strong className="text-white">{lastWinningNonce}</strong>
-              </div>
-              <div className="break-all">
-                <span className="text-gray-500">Winning BLAKE2s Hash: </span>
-                <strong className="text-[#00ff41]">{lastWinningHash}</strong>
-              </div>
-              <div className="break-all">
-                <span className="text-gray-500">Target Threshold:     </span>
-                <span className="text-yellow-400">{activeTargetDifficulty}</span>
-              </div>
-              {lastCommitment && (
-                <div className="break-all pt-1 text-[#00f3ff]">
-                  🔒 STRK20 Shielded Note Commitment Saved in Vault: <strong>{lastCommitment}</strong>
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {minedBlocksFeed.map((blk, idx) => (
+                <div
+                  key={`${blk.round}-${blk.nonce}-${idx}`}
+                  className="p-3 bg-black/80 border border-gray-800 rounded space-y-1 text-[11px] text-gray-300"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[#00ff41] font-bold">
+                      ✓ Block #{minedBlocksFeed.length - idx} (Round {blk.round}) — +{blk.rewardSblake.toFixed(2)} SBLAKE ({blk.shielded ? '🔒 STRK20 Shielded' : '💳 Public'})
+                    </span>
+                    <span className="text-[10px] text-gray-500">
+                      {new Date(blk.timestamp).toLocaleTimeString()} | Nonce: <strong className="text-white">{blk.nonce}</strong>
+                    </span>
+                  </div>
+                  <div className="break-all text-[10px] text-gray-400">
+                    Proof Hash: <span className="text-[#00ff41]">{blk.hash}</span> &lt; Target ✓
+                  </div>
+                  {blk.commitment && (
+                    <div className="break-all text-[10px] text-[#00f3ff]">
+                      STRK20 Commitment: {blk.commitment}
+                    </div>
+                  )}
                 </div>
-              )}
-              <div className="pt-1 flex flex-wrap items-center justify-between gap-2 border-t border-gray-800/80">
-                <span>
-                  Settlement:{' '}
-                  <strong className="text-white">
-                    {lastMintOnChain
-                      ? 'Submitted On-Chain to Starknet Sepolia'
-                      : 'Credited to Local STRK20 Vault (Deploy Sepolia Contract in Status Tab for Live Starkscan Tx)'}
-                  </strong>
-                </span>
-                {lastMintOnChain && (
-                  <a
-                    href={`https://sepolia.starkscan.co/tx/${lastMint}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[#00f3ff] underline font-bold"
-                  >
-                    View Tx on Starkscan ({lastMint.slice(0, 10)}...) &rarr;
-                  </a>
-                )}
-              </div>
+              ))}
             </div>
           </motion.div>
         )}

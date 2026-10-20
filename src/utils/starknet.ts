@@ -284,14 +284,36 @@ export const getSBlakeBalance = async (address: string): Promise<string> => {
   return "0";
 };
 
+export interface QueuedBlockProof {
+  round: number;
+  nonce: string;
+  hash: string;
+  shielded: boolean;
+  rewardSblake: number;
+  commitment?: string;
+  salt?: string;
+  viewingKey?: string;
+  brotherId?: string;
+  timestamp: number;
+  settledOnChain: boolean;
+  txHash: string;
+}
+
 export const mintSBlake = async (
   account: any,
   nonce: string,
   shielded: boolean = false,
-  brotherId?: string
+  brotherId?: string,
+  autoSubmitOnChain: boolean = false
 ) => {
-  console.log(`[StarkBlake SDK] Submitting PoW solution. Shielded: ${shielded}, Nonce: ${nonce}`);
+  console.log(`[StarkBlake SDK] Processing PoW solution. Shielded: ${shielded}, Nonce: ${nonce}`);
   const activeAcc = bindAccountToCustomProvider(account, provider);
+  const canExecuteOnChain =
+    autoSubmitOnChain &&
+    activeAcc &&
+    typeof activeAcc.execute === 'function' &&
+    CONTRACT_ADDRESS &&
+    !CONTRACT_ADDRESS.startsWith("0x0123456789");
 
   if (shielded) {
     // Draft 1.1: 10 SBLAKE Era 1 base + 15% STRK20 Shielded bonus = 11.5 SBLAKE
@@ -299,7 +321,7 @@ export const mintSBlake = async (
     const note = await createShieldedNote(activeAcc?.address || "0x0", shieldedRewardWei);
     saveNoteLocally(note);
 
-    if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+    if (canExecuteOnChain) {
       const tx = await activeAcc.execute({
         contractAddress: CONTRACT_ADDRESS,
         entrypoint: "mint_shielded",
@@ -321,7 +343,7 @@ export const mintSBlake = async (
   }
 
   // Standard Transparent Minting (10 SBLAKE Era 1)
-  if (activeAcc && activeAcc.execute && CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789")) {
+  if (canExecuteOnChain) {
     const tx = await activeAcc.execute({
       contractAddress: CONTRACT_ADDRESS,
       entrypoint: "mint",
@@ -333,7 +355,7 @@ export const mintSBlake = async (
     return { transaction_hash: tx.transaction_hash, isOnChain: true };
   }
 
-  // Track local simulated transparent balance when no Sepolia contract is linked yet
+  // Track local simulated transparent balance
   const prevSim = Number(localStorage.getItem('sblake_sim_public_balance') || '0');
   localStorage.setItem('sblake_sim_public_balance', (prevSim + 10).toString());
 
@@ -341,6 +363,47 @@ export const mintSBlake = async (
     transaction_hash: "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join(''),
     isOnChain: false,
   };
+};
+
+export const batchSettleMinedBlocks = async (
+  account: any,
+  blocks: QueuedBlockProof[]
+) => {
+  const activeAcc = bindAccountToCustomProvider(account, provider);
+  if (
+    !activeAcc ||
+    typeof activeAcc.execute !== 'function' ||
+    !CONTRACT_ADDRESS ||
+    CONTRACT_ADDRESS.startsWith("0x0123456789")
+  ) {
+    throw new Error("Deploy or link a live Sepolia contract in the Status Dashboard tab first to batch-settle on-chain.");
+  }
+
+  const calls = blocks.map((b) => {
+    const nonceBig = BigInt(b.nonce);
+    if (b.shielded && b.commitment) {
+      return {
+        contractAddress: CONTRACT_ADDRESS,
+        entrypoint: "mint_shielded",
+        calldata: CallData.compile({
+          nonce: { low: nonceBig & 0xffffffffffffffffffffffffffffffffn, high: nonceBig >> 128n },
+          commitment: b.commitment,
+          encrypted_note: [b.salt || "0x1", b.viewingKey || "0x1"],
+        }),
+      };
+    }
+    return {
+      contractAddress: CONTRACT_ADDRESS,
+      entrypoint: "mint",
+      calldata: CallData.compile({
+        nonce: { low: nonceBig & 0xffffffffffffffffffffffffffffffffn, high: nonceBig >> 128n },
+        brother_id: b.brotherId || "0",
+      }),
+    };
+  });
+
+  const tx = await activeAcc.execute(calls);
+  return { transaction_hash: tx.transaction_hash };
 };
 
 export const bondBlakeNode = async (
