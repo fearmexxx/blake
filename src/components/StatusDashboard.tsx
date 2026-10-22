@@ -26,9 +26,10 @@ import { ContractDeployer } from './ContractDeployer';
 interface StatusDashboardProps {
   account: any;
   wallet: any;
+  address?: string;
 }
 
-export const StatusDashboard: React.FC<StatusDashboardProps> = ({ account, wallet }) => {
+export const StatusDashboard: React.FC<StatusDashboardProps> = ({ account, wallet, address }) => {
   const [timeline, setTimeline] = useState<TimelineStats>({
     era: 1,
     blockReward: '10',
@@ -307,6 +308,7 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ account, walle
       <ContractDeployer
         account={account}
         wallet={wallet}
+        address={address}
         onDeployed={() => refreshAll()}
       />
     </div>

@@ -70,6 +70,13 @@ const App: React.FC = () => {
             if (Array.isArray(accounts) && accounts.length > 0) addr = accounts[0];
           }
           if (addr) {
+            try {
+              res.selectedAddress = addr;
+              if (res.account) res.account.address = addr;
+            } catch {
+              // ignore read-only property errors
+            }
+            localStorage.setItem('sblake_connected_address', addr);
             setAddress(addr);
             setWallet(res);
           }
@@ -169,6 +176,13 @@ const App: React.FC = () => {
         }
 
         if (addr) {
+          try {
+            res.selectedAddress = addr;
+            if (res.account) res.account.address = addr;
+          } catch {
+            // ignore read-only property errors
+          }
+          localStorage.setItem('sblake_connected_address', addr);
           setAddress(addr);
           setWallet(res);
           localStorage.setItem('sblake_wallet_mode', 'extension');
@@ -544,7 +558,11 @@ const App: React.FC = () => {
         )}
 
         {activeView === 'status' && (
-          <StatusDashboard account={wallet?.account || wallet} wallet={wallet} />
+          <StatusDashboard
+            account={wallet?.account || wallet}
+            wallet={wallet}
+            address={address || undefined}
+          />
         )}
 
         {activeView === 'vpn' && (

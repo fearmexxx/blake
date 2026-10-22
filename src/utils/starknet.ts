@@ -1,4 +1,4 @@
-import { Contract, RpcProvider, CallData } from 'starknet';
+import { Contract, RpcProvider, CallData, WalletAccount } from 'starknet';
 import { createShieldedNote, saveNoteLocally } from './privacy';
 import sierraData from '../../contracts/target/dev/sblake_sblake.contract_class.json';
 
@@ -84,14 +84,68 @@ export const createSanitizedProvider = (nodeUrl: string = getActiveRpcUrl()): Rp
 // Global primary provider
 export const provider = createSanitizedProvider(getActiveRpcUrl());
 
+const wrapExecuteWithHexCalldata = (acc: any) => {
+  if (!acc || typeof acc.execute !== 'function' || acc.__hexCalldataPatched) {
+    return acc;
+  }
+  const origExecute = acc.execute.bind(acc);
+  acc.execute = async (calls: any, ...rest: any[]) => {
+    const normalized = (Array.isArray(calls) ? calls : [calls]).map((c: any) => ({
+      ...c,
+      calldata: Array.isArray(c?.calldata) ? CallData.toHex(c.calldata) : c?.calldata,
+    }));
+    return origExecute(Array.isArray(calls) ? normalized : normalized[0], ...rest);
+  };
+  acc.__hexCalldataPatched = true;
+  return acc;
+};
+
 /**
- * Binds our sanitized provider & channel to a connected wallet account
- * to ensure wallet methods don't query OnFinality or send 'pending' block IDs.
+ * Binds our sanitized provider & channel to a connected wallet account,
+ * ensures address + cairoVersion='1' are always set so Starknet.js v8
+ * never throws "getContractVersion require contractAddress or classHash",
+ * and normalizes all execute() calldata to 0x hex strings so Braavos/Argent X
+ * never reject decimal felt strings with "The request payload is invalid".
  */
-export const bindAccountToCustomProvider = (account: any, customProvider: RpcProvider = provider) => {
+export const bindAccountToCustomProvider = (
+  account: any,
+  customProvider: RpcProvider = provider,
+  explicitAddress?: string | null
+) => {
   if (!account) return account;
+  const savedAddr =
+    explicitAddress ||
+    account?.address ||
+    account?.selectedAddress ||
+    account?.account?.address ||
+    (typeof window !== 'undefined' ? localStorage.getItem('sblake_connected_address') : '') ||
+    '';
+
+  // If account is a @starknet-io/get-starknet v4 wallet provider (has .request), wrap in WalletAccount
+  if (typeof account.request === 'function' && typeof account.execute !== 'function' && savedAddr) {
+    try {
+      const wa: any = new WalletAccount({
+        provider: customProvider,
+        walletProvider: account,
+        address: savedAddr,
+        cairoVersion: '1',
+      });
+      wa.address = savedAddr;
+      wa.cairoVersion = '1';
+      return wrapExecuteWithHexCalldata(wa);
+    } catch (err) {
+      console.warn("[Starknet] WalletAccount wrapper fallback:", err);
+    }
+  }
+
   const target = account.account || account;
   try {
+    if (savedAddr && !target.address) {
+      target.address = savedAddr;
+    }
+    if (!target.cairoVersion) {
+      target.cairoVersion = '1';
+    }
     if ((customProvider as any).channel) {
       target.channel = (customProvider as any).channel;
     }
@@ -99,7 +153,7 @@ export const bindAccountToCustomProvider = (account: any, customProvider: RpcPro
   } catch (e) {
     console.warn("[Starknet] Could not bind custom provider to account:", e);
   }
-  return target;
+  return wrapExecuteWithHexCalldata(target);
 };
 
 // Configurable SBLAKE contract address (defaults to deployed contract or local override once set)

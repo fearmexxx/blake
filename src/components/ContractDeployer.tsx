@@ -39,10 +39,11 @@ const UDC_ADDRESS = constants.UDC.ADDRESS;
 interface ContractDeployerProps {
   account: any;
   wallet?: any;
+  address?: string;
   onDeployed?: (address: string) => void;
 }
 
-export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wallet, onDeployed }) => {
+export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wallet, address, onDeployed }) => {
   const [isDeploying, setIsDeploying] = useState(false);
   const [step, setStep] = useState<string>('');
   const [deployedAddress, setDeployedAddress] = useState<string | null>(
@@ -95,21 +96,33 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
   }, [deployedAddress]);
 
   const getEffectiveAccount = () => {
-    if (wallet && typeof WalletAccount === 'function') {
+    const walletAddr =
+      address ||
+      account?.address ||
+      wallet?.selectedAddress ||
+      wallet?.account?.address ||
+      localStorage.getItem('sblake_connected_address') ||
+      '';
+
+    if (wallet && typeof WalletAccount === 'function' && walletAddr) {
       try {
-        const walletAddr = account?.address || wallet?.selectedAddress || wallet?.account?.address || '';
-        if (walletAddr) {
-          const wa = new WalletAccount({ provider, walletProvider: wallet, address: walletAddr });
-          if (wa) {
-            return wa;
-          }
+        const wa: any = new WalletAccount({
+          provider,
+          walletProvider: wallet,
+          address: walletAddr,
+          cairoVersion: '1',
+        });
+        if (wa) {
+          wa.address = walletAddr;
+          wa.cairoVersion = '1';
+          return bindAccountToCustomProvider(wa, provider, walletAddr);
         }
       } catch (err) {
         console.warn("[Deployer] WalletAccount creation fallback:", err);
       }
     }
     if (account) {
-      return bindAccountToCustomProvider(account, provider);
+      return bindAccountToCustomProvider(account, provider, walletAddr);
     }
     return null;
   };
@@ -141,23 +154,33 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
       }
 
       if (!declared) {
-        // First try direct wallet declaration (works natively in Braavos & Argent X!)
+        // First try direct wallet declaration via WalletAccount.declare (wallet_addDeclareTransaction)
+        // which works natively in Braavos & Argent X without calling getContractVersion!
         let directDeclared = false;
-        if (typeof activeAcc.declareIfNot === 'function') {
+        if (typeof activeAcc.declare === 'function') {
           try {
             setStep("Step 1/2: Approving SBLAKE class declaration in wallet (Braavos / Argent X)...");
-            const decRes = await activeAcc.declareIfNot({
+            const decRes = await activeAcc.declare({
               contract: sierraData as any,
               casm: casmData as any,
+              classHash: SBLAKE_SIERRA_CLASS_HASH,
+              compiledClassHash: SBLAKE_CASM_CLASS_HASH,
             });
-            if (decRes.transaction_hash) {
+            const decTxHash = decRes?.transaction_hash;
+            if (decTxHash) {
               setStep("Waiting for class declaration confirmation on Sepolia...");
-              await provider.waitForTransaction(decRes.transaction_hash);
+              await provider.waitForTransaction(decTxHash);
             }
             directDeclared = true;
             setIsClassDeclared(true);
           } catch (directErr: any) {
-            console.warn("[Deployer] Direct wallet declare not supported, falling back to relayer:", directErr?.message || directErr);
+            const msg = directErr?.message || String(directErr);
+            if (msg.includes("already declared") || msg.includes("Class already declared")) {
+              directDeclared = true;
+              setIsClassDeclared(true);
+            } else {
+              console.warn("[Deployer] Direct wallet declare not supported, falling back to relayer:", msg);
+            }
           }
         }
 

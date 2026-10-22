@@ -45,19 +45,19 @@ interface MinerProps {
 
 const DIFFICULTY_PRESETS: Record<'fast' | 'standard' | 'hard', { label: string; targetHex: string; avgHashes: string }> = {
   fast: {
-    label: '16-Bit Fast Verify (~65k hashes / 1–3s)',
-    targetHex: '0x0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-    avgHashes: '~65,536',
+    label: '21-Bit Balanced (~2.1M hashes / 3–8s)',
+    targetHex: '0x000007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    avgHashes: '~2,097,152',
   },
   standard: {
-    label: '20-Bit Standard Beta (~1M hashes / 5–15s)',
-    targetHex: '0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-    avgHashes: '~1,048,576',
-  },
-  hard: {
-    label: '24-Bit High Diff (~16.7M hashes / 1–3m)',
+    label: '24-Bit Standard Beta (~16.7M hashes / 20–60s on 5900X / default)',
     targetHex: '0x000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
     avgHashes: '~16,777,216',
+  },
+  hard: {
+    label: '26-Bit High Diff (~67.1M hashes / 1–3m)',
+    targetHex: '0x0000003fffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    avgHashes: '~67,108,864',
   },
 };
 
@@ -466,9 +466,9 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
                 onChange={(e) => handleDifficultyChange(e.target.value as 'fast' | 'standard' | 'hard')}
                 className="bg-black/80 border border-gray-700 text-[#00ff41] px-2.5 py-1 rounded text-xs font-mono outline-none cursor-pointer"
               >
-                <option value="fast">⚡ 16-Bit Fast Verify (~65k hashes / 1–3 sec)</option>
-                <option value="standard">🛡️ 20-Bit Standard Beta (~1M hashes / 5–15 sec)</option>
-                <option value="hard">🔥 24-Bit Hard (~16.7M hashes / 1–3 min)</option>
+                <option value="fast">⚡ 21-Bit Balanced (~2.1M hashes / 3–8s)</option>
+                <option value="standard">🛡️ 24-Bit Standard Beta (~16.7M hashes / default)</option>
+                <option value="hard">🔥 26-Bit High Diff (~67.1M hashes / 1–3m)</option>
               </select>
             </div>
           </div>
