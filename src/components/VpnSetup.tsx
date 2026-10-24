@@ -95,7 +95,8 @@ const generateWireGuardKey = (): string => {
 export const VpnSetup: React.FC<VpnSetupProps> = ({ address, account, onConnect }) => {
   const [activeTab, setActiveTab] = useState<'client' | 'node'>('client');
   const [selectedRegion, setSelectedRegion] = useState<VpnRegion>(VPN_REGIONS[0]);
-  const [deliveryMode, setDeliveryMode] = useState<'wireguard' | 'proxy'>('wireguard');
+  const [deliveryMode, setDeliveryMode] = useState<'wireguard' | 'proxy' | 'extension'>('wireguard');
+  const [provisionTab, setProvisionTab] = useState<'bash' | 'docker'>('bash');
 
   // Ephemeral WireGuard Session Keys
   const [wgPrivateKey, setWgPrivateKey] = useState<string>('');
@@ -207,12 +208,29 @@ function FindProxyForURL(url, host) {
   return "SOCKS5 ${selectedRegion.proxyHost}; PROXY ${selectedRegion.proxyHost}; DIRECT";
 }`;
 
+  const browserExtensionGuideText = `# BlakeVPN Chrome / Brave Extension (Manifest V3 — /extension folder)
+1. Open Chrome or Brave and navigate to: chrome://extensions
+2. Enable "Developer mode" (top-right toggle)
+3. Click "Load unpacked" and select the project's /extension folder
+4. Open the BlakeVPN Extension popup in your browser toolbar:
+   - Region: ${selectedRegion.id} (${selectedRegion.name})
+   - Custom VPS SOCKS5 (Optional): ${selectedRegion.proxyHost}
+   - Active Session Nullifier: ${sessionFeltPubkey.slice(0, 22)}...
+5. Click "ACTIVATE UNLINKABLE PROXY" for instant 1-click browser routing!`;
+
   const handleDownloadConf = () => {
-    const content = deliveryMode === 'wireguard' ? wireGuardConfText : browserProxyPacText;
+    const content =
+      deliveryMode === 'wireguard'
+        ? wireGuardConfText
+        : deliveryMode === 'proxy'
+        ? browserProxyPacText
+        : browserExtensionGuideText;
     const filename =
       deliveryMode === 'wireguard'
         ? `blakevpn-${selectedRegion.id.toLowerCase()}.conf`
-        : `blakevpn-${selectedRegion.id.toLowerCase()}.pac`;
+        : deliveryMode === 'proxy'
+        ? `blakevpn-${selectedRegion.id.toLowerCase()}.pac`
+        : `blakevpn-extension-setup.txt`;
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -223,7 +241,12 @@ function FindProxyForURL(url, host) {
   };
 
   const handleCopyConfig = () => {
-    const content = deliveryMode === 'wireguard' ? wireGuardConfText : browserProxyPacText;
+    const content =
+      deliveryMode === 'wireguard'
+        ? wireGuardConfText
+        : deliveryMode === 'proxy'
+        ? browserProxyPacText
+        : browserExtensionGuideText;
     navigator.clipboard.writeText(content);
     setCopiedConfig(true);
     setTimeout(() => setCopiedConfig(false), 2000);
@@ -247,17 +270,28 @@ function FindProxyForURL(url, host) {
     }
   };
 
-  const dockerProvisionCmd = `docker run -d --name blakenode-exit \\
+  const bashProvisionCmd = `# 1-Click VPS Host Installer (Ubuntu 22.04+ / Debian 12)
+curl -sSL https://raw.githubusercontent.com/fearmexxx/blake/master/node-runner/install-vps.sh | \\
+  sudo STARKNET_OPERATOR="${address || '0xYOUR_STARKNET_WALLET'}" \\
+  BLAKE_REGION="${nodeRegion}" \\
+  WG_PORT="51820" SOCKS_PORT="1080" bash`;
+
+  const dockerProvisionCmd = `# Option A: Using node-runner/docker-compose.yml (Recommended)
+cd node-runner && STARKNET_OPERATOR="${address || '0xYOUR_STARKNET_WALLET'}" BLAKE_REGION="${nodeRegion}" docker compose up -d
+
+# Option B: Direct Docker Container Run
+docker run -d --name blakenode-exit \\
   --cap-add=NET_ADMIN --device=/dev/net/tun \\
   -e STARKNET_OPERATOR="${address || '0xYOUR_STARKNET_WALLET'}" \\
   -e BLAKE_REGION="${nodeRegion}" \\
   -e WG_PUBLIC_ENDPOINT="${nodeEndpointInput}" \\
   -e BETA_SUBSIDIZED="${useBetaSubsidy ? 'true' : 'false'}" \\
-  -p 51820:51820/udp -p 1080:1080/tcp \\
+  -p 51820:51820/udp -p 1080:1080/tcp -p 8088:8088/tcp \\
   ghcr.io/fearmexxx/blakenode-daemon:v1.1-beta`;
 
   const handleCopyDocker = () => {
-    navigator.clipboard.writeText(dockerProvisionCmd);
+    const textToCopy = provisionTab === 'bash' ? bashProvisionCmd : dockerProvisionCmd;
+    navigator.clipboard.writeText(textToCopy);
     setCopiedDocker(true);
     setTimeout(() => setCopiedDocker(false), 2000);
   };
@@ -488,6 +522,16 @@ function FindProxyForURL(url, host) {
                   >
                     Browser Proxy (.pac)
                   </button>
+                  <button
+                    onClick={() => setDeliveryMode('extension')}
+                    className={`px-2.5 py-1 rounded font-bold transition-colors ${
+                      deliveryMode === 'extension'
+                        ? 'bg-purple-500 text-white'
+                        : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Chrome Extension
+                  </button>
                 </div>
               </div>
 
@@ -504,14 +548,22 @@ function FindProxyForURL(url, host) {
                   </a>{' '}
                   (Windows, macOS, Linux, iOS, Android) for full kernel-grade encryption.
                 </p>
+              ) : deliveryMode === 'proxy' ? (
+                <p className="text-xs text-gray-300 leading-relaxed">
+                  <strong>Instant Browser-Only Routing (Zero OS Drivers):</strong> Load this PAC file or SOCKS5 endpoint (`{selectedRegion.proxyHost}`) directly in your browser network settings to tunnel browser tabs through BlakeNode.
+                </p>
               ) : (
                 <p className="text-xs text-gray-300 leading-relaxed">
-                  <strong>Instant Browser-Only Routing (Zero OS Drivers):</strong> Load this PAC file or SOCKS5 endpoint (`{selectedRegion.proxyHost}`) directly in your browser network settings or proxy extension to tunnel browser tabs through BlakeNode.
+                  <strong>1-Click Chrome / Brave Extension (`/extension`):</strong> Load the included Manifest V3 extension (`extension/manifest.json`) in Developer Mode to toggle SOCKS5 routing directly from your browser toolbar.
                 </p>
               )}
 
               <pre className="bg-black/95 border border-gray-800 p-4 rounded text-[11px] font-mono text-gray-200 overflow-x-auto leading-relaxed">
-                {deliveryMode === 'wireguard' ? wireGuardConfText : browserProxyPacText}
+                {deliveryMode === 'wireguard'
+                  ? wireGuardConfText
+                  : deliveryMode === 'proxy'
+                  ? browserProxyPacText
+                  : browserExtensionGuideText}
               </pre>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -522,7 +574,9 @@ function FindProxyForURL(url, host) {
                   <Download size={15} />
                   {deliveryMode === 'wireguard'
                     ? `Download ${selectedRegion.id.toLowerCase()}.conf`
-                    : `Download ${selectedRegion.id.toLowerCase()}.pac`}
+                    : deliveryMode === 'proxy'
+                    ? `Download ${selectedRegion.id.toLowerCase()}.pac`
+                    : `Download Extension Guide`}
                 </button>
 
                 <button
@@ -627,22 +681,39 @@ function FindProxyForURL(url, host) {
 
           <div className="lg:col-span-6 space-y-6">
             <div className="glass-panel p-6 border border-gray-800 space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-800 pb-3">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <Terminal size={16} className="text-[#00ff41]" />
-                  Step 2: Launch BlakeNode Docker Daemon
+                  Step 2: 1-Click VPS Host &amp; Docker Provisioning
                 </h3>
-                <span className="text-[10px] font-mono text-gray-400">
-                  Ubuntu 22.04+ / Debian 12
-                </span>
+                <div className="flex items-center gap-1 bg-black/80 p-1 rounded border border-gray-800 text-[10px] font-mono">
+                  <button
+                    onClick={() => setProvisionTab('bash')}
+                    className={`px-2 py-0.5 rounded font-bold ${
+                      provisionTab === 'bash' ? 'bg-[#00ff41] text-black' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    1-Click VPS Script
+                  </button>
+                  <button
+                    onClick={() => setProvisionTab('docker')}
+                    className={`px-2 py-0.5 rounded font-bold ${
+                      provisionTab === 'docker' ? 'bg-purple-500 text-white' : 'text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    Docker Compose
+                  </button>
+                </div>
               </div>
 
               <p className="text-xs text-gray-400 leading-relaxed">
-                Deploy the containerized WireGuard + SOCKS5 relay daemon on your VPS or residential host. It automatically verifies on-chain `VpnPassPurchased` events and submits hourly uptime heartbeats.
+                {provisionTab === 'bash'
+                  ? 'Run our turnkey bash installer (node-runner/install-vps.sh) on any fresh Ubuntu 22.04+ or Debian 12 VPS. Automatically configures WireGuard (UDP 51820), Dante SOCKS5 (TCP 1080), kernel IP forwarding, and Starknet SLA heartbeats.'
+                  : 'Deploy the containerized WireGuard + SOCKS5 relay daemon (node-runner/docker-compose.yml & daemon.mjs) on your VPS or residential host. Exposes JSON health telemetry on port 8088.'}
               </p>
 
               <pre className="bg-black/95 border border-gray-800 p-4 rounded text-[11px] font-mono text-[#00ff41] overflow-x-auto leading-relaxed">
-                {dockerProvisionCmd}
+                {provisionTab === 'bash' ? bashProvisionCmd : dockerProvisionCmd}
               </pre>
 
               <button
@@ -650,7 +721,7 @@ function FindProxyForURL(url, host) {
                 className="w-full py-3 px-4 bg-white/10 hover:bg-white/20 text-white font-bold text-xs uppercase tracking-wider rounded-sm border border-white/15 transition-colors flex items-center justify-center gap-2"
               >
                 {copiedDocker ? <Check size={15} className="text-[#00ff41]" /> : <Copy size={15} />}
-                {copiedDocker ? 'Docker Command Copied!' : 'Copy Docker Provisioning Command'}
+                {copiedDocker ? 'Provisioning Command Copied!' : 'Copy VPS Provisioning Command'}
               </button>
             </div>
           </div>

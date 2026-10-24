@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>BlakeVPN Extension</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 320px;
+      background: #060606;
+      color: #f3f4f6;
+      font-family: 'Courier New', monospace;
+      padding: 16px;
+      border: 1px solid #1f2937;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1f2937;
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+    }
+    .brand {
+      font-weight: 900;
+      font-size: 14px;
+      color: #ffffff;
+      letter-spacing: 0.5px;
+    }
+    .brand span { color: #00f3ff; }
+    .badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: rgba(0, 255, 65, 0.12);
+      color: #00ff41;
+      border: 1px solid rgba(0, 255, 65, 0.3);
+      font-weight: bold;
+    }
+    .status-box {
+      padding: 12px;
+      border-radius: 4px;
+      background: #0d0d0d;
+      border: 1px solid #1f2937;
+      margin-bottom: 12px;
+      text-align: center;
+    }
+    .status-indicator {
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+    .status-sub {
+      font-size: 10px;
+      color: #9ca3af;
+      word-break: break-all;
+    }
+    label {
+      display: block;
+      font-size: 10px;
+      color: #9ca3af;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    select, input {
+      width: 100%;
+      background: #111;
+      border: 1px solid #374151;
+      color: #fff;
+      padding: 7px 8px;
+      font-family: inherit;
+      font-size: 11px;
+      border-radius: 3px;
+      margin-bottom: 10px;
+      outline: none;
+    }
+    select:focus, input:focus {
+      border-color: #00f3ff;
+    }
+    button.connect-btn {
+      width: 100%;
+      padding: 10px;
+      font-family: inherit;
+      font-weight: 900;
+      font-size: 12px;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-disconnected {
+      background: #00ff41;
+      color: #000;
+      box-shadow: 0 0 15px rgba(0, 255, 65, 0.3);
+    }
+    .btn-connected {
+      background: #ef4444;
+      color: #fff;
+      box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+    }
+    .footer {
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px solid #1f2937;
+      font-size: 9px;
+      color: #6b7280;
+      display: flex;
+      justify-content: space-between;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">BLAKE<span>VPN</span> PROXY</div>
+    <span class="badge">STRK20 ALPHA</span>
+  </div>
+
+  <div class="status-box">
+    <div id="statusText" class="status-indicator" style="color: #9ca3af;">DISCONNECTED</div>
+    <div id="sessionTokenText" class="status-sub">Unlinkable Nullifier Session Ready</div>
+  </div>
+
+  <div>
+    <label for="regionSelect">Select Bonded BlakeNode Relay</label>
+    <select id="regionSelect">
+      <option value="EU-WEST-1">EU-West (Frankfurt) — 24ms</option>
+      <option value="US-EAST-1">US-East (Virginia) — 68ms</option>
+      <option value="AP-SE-1">Asia-Pacific (Singapore) — 41ms</option>
+    </select>
+
+    <label for="customHost">Custom VPS Node (IP:Port — Optional)</label>
+    <input id="customHost" type="text" placeholder="e.g. 203.0.113.55:1080" />
+
+    <button id="toggleBtn" class="connect-btn btn-disconnected">
+      ACTIVATE UNLINKABLE PROXY
+    </button>
+  </div>
+
+  <div class="footer">
+    <span>60% Ops / 25% Burn / 15% Yield</span>
+    <span>Starknet Sepolia</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

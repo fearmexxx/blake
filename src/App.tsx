@@ -14,11 +14,13 @@ import {
   Cpu,
   Activity,
   Home,
+  BookOpen,
 } from 'lucide-react';
 import Miner from './components/Miner';
 import { BetaHomepage, AppView } from './components/BetaHomepage';
 import { StatusDashboard } from './components/StatusDashboard';
 import { VpnSetup } from './components/VpnSetup';
+import { DocumentationPage } from './components/DocumentationPage';
 import {
   getProtocolMetrics,
   getTimelineStats,
@@ -234,10 +236,11 @@ const App: React.FC = () => {
   };
 
   const navItems: { id: AppView; label: string; icon: React.ReactNode; badge?: string }[] = [
-    { id: 'home', label: 'BETA HOME', icon: <Home size={14} /> },
+    { id: 'home', label: 'ALPHA HOME', icon: <Home size={14} /> },
     { id: 'miner', label: 'MINING CLIENT', icon: <Cpu size={14} />, badge: '10 SB' },
     { id: 'status', label: 'STATUS DASHBOARD', icon: <Activity size={14} /> },
     { id: 'vpn', label: 'BLAKEVPN & NODE SETUP', icon: <GlobeLock size={14} />, badge: 'HYBRID' },
+    { id: 'docs', label: 'DOCS & VPS GUIDE', icon: <BookOpen size={14} /> },
   ];
 
   return (
@@ -571,6 +574,10 @@ const App: React.FC = () => {
             account={wallet?.account || wallet}
             onConnect={handleConnect}
           />
+        )}
+
+        {activeView === 'docs' && (
+          <DocumentationPage onNavigate={setActiveView} />
         )}
       </main>
 

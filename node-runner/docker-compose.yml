@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  blakenode-daemon:
+    image: node:20-alpine
+    container_name: blakenode-exit-daemon
+    restart: unless-stopped
+    working_dir: /app
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    ports:
+      - "51820:51820/udp"
+      - "1080:1080/tcp"
+      - "8088:8088/tcp"
+    environment:
+      - STARKNET_RPC_URL=https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_10/qXU4ta4yLmxUhIoLb-cZ7KtsNn808Pjw
+      - SBLAKE_CONTRACT=${SBLAKE_CONTRACT:-0x0123456789abcdef}
+      - STARKNET_OPERATOR=${STARKNET_OPERATOR:-0xYOUR_STARKNET_WALLET}
+      - BLAKE_REGION=${BLAKE_REGION:-EU-WEST-1}
+      - WG_PORT=51820
+      - SOCKS_PORT=1080
+      - STATUS_PORT=8088
+    volumes:
+      - ./daemon.mjs:/app/daemon.mjs:ro
+    command: ["node", "daemon.mjs"]

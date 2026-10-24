@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "BlakeVPN — Unlinkable Starknet Proxy & Node Client",
+  "version": "1.1.0",
+  "description": "Zero-driver SOCKS5/HTTPS Browser Proxy & STRK20 Unlinkable Session Client for BlakeVPN & BlakeNode on Starknet.",
+  "permissions": [
+    "proxy",
+    "storage"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "BlakeVPN Proxy Controller"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

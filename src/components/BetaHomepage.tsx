@@ -2,20 +2,19 @@ import React from 'react';
 import {
   Cpu,
   GlobeLock,
-  Shield,
   Server,
   BarChart3,
   ArrowRight,
   CheckCircle2,
-  Flame,
   Lock,
   Zap,
   Layers,
   Terminal,
+  BookOpen,
 } from 'lucide-react';
 import { ProtocolMetrics, TimelineStats } from '../utils/starknet';
 
-export type AppView = 'home' | 'miner' | 'status' | 'vpn';
+export type AppView = 'home' | 'miner' | 'status' | 'vpn' | 'docs';
 
 interface BetaHomepageProps {
   onNavigate: (view: AppView) => void;
@@ -46,13 +45,13 @@ export const BetaHomepage: React.FC<BetaHomepageProps> = ({
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <span className="px-2.5 py-1 rounded text-[11px] font-mono font-bold bg-[#00ff41]/15 text-[#00ff41] border border-[#00ff41]/30 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#00ff41] animate-pulse" />
-            INVITED BETA PHASE (DRAFT 1.1 — OCT 2026)
+            PUBLIC ALPHA &amp; INVITED BETA LIVE (DRAFT 1.1)
           </span>
           <span className="px-2.5 py-1 rounded text-[11px] font-mono font-bold bg-[#00f3ff]/10 text-[#00f3ff] border border-[#00f3ff]/30">
             STRK20 PRIVACY POOL
           </span>
           <span className="px-2.5 py-1 rounded text-[11px] font-mono font-bold bg-purple-500/10 text-purple-300 border border-purple-500/30">
-            PRESALE DEFERRED UNTIL BETA GATE PASSES
+            1-CLICK VPS NODE &amp; CHROME EXTENSION READY
           </span>
         </div>
 
@@ -94,6 +93,14 @@ export const BetaHomepage: React.FC<BetaHomepageProps> = ({
               >
                 <BarChart3 size={16} />
                 Status &amp; Flywheel Audit
+              </button>
+
+              <button
+                onClick={() => onNavigate('docs')}
+                className="px-5 py-3.5 bg-purple-500/15 text-purple-300 border border-purple-500/40 font-bold text-xs uppercase tracking-wider rounded-sm hover:bg-purple-500/25 transition-all flex items-center gap-2"
+              >
+                <BookOpen size={16} />
+                Docs &amp; 1-Click VPS Guide
               </button>
             </div>
 

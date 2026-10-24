@@ -26,7 +26,6 @@ import {
   unshieldSBlake,
   burnForUtility,
   getSBlakeBalance,
-  CONTRACT_ADDRESS,
 } from '../utils/starknet';
 import { getFingerprint } from '../utils/fingerprint';
 import {
@@ -70,12 +69,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
   const [challenge, setChallenge] = useState<any>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const [brotherId, setBrotherId] = useState<string | null>(null);
-  const [lastMint, setLastMint] = useState<string | null>(null);
-  const [lastCommitment, setLastCommitment] = useState<string | null>(null);
-  const [lastWinningNonce, setLastWinningNonce] = useState<string | null>(null);
-  const [lastWinningHash, setLastWinningHash] = useState<string | null>(null);
-  const [lastMintOnChain, setLastMintOnChain] = useState<boolean>(false);
   const [blocksMinedSession, setBlocksMinedSession] = useState<number>(0);
+  const [mintsTodayCount, setMintsTodayCount] = useState<number>(0);
   const [minedBlocksFeed, setMinedBlocksFeed] = useState<QueuedBlockProof[]>([]);
   const [autoSignPerBlock, setAutoSignPerBlock] = useState<boolean>(false);
   const [bestHashSoFar, setBestHashSoFar] = useState<string | null>(null);
@@ -170,6 +165,18 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
     }
   };
 
+  const dailyCapLimit = brotherId === 'OVERCLOCK_BOOST' ? 20 : 10;
+  const dailyCapRef = useRef<number>(dailyCapLimit);
+  const mintsTodayRef = useRef<number>(mintsTodayCount);
+
+  useEffect(() => {
+    dailyCapRef.current = brotherId === 'OVERCLOCK_BOOST' ? 20 : 10;
+  }, [brotherId]);
+
+  useEffect(() => {
+    mintsTodayRef.current = mintsTodayCount;
+  }, [mintsTodayCount]);
+
   const fetchData = async () => {
     try {
       const [challengeData, timelineData, pubBal] = await Promise.all([
@@ -180,9 +187,18 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
       setChallenge(challengeData);
       setTimeline(timelineData);
       setPublicBalance(pubBal);
+      if (challengeData?.mintsToday) {
+        setMintsTodayCount((prev) => Math.max(prev, challengeData.mintsToday));
+      }
     } catch {
       setError("Failed to fetch contract challenge & timeline from Starknet.");
     }
+  };
+
+  const handleResetDailyTestCap = () => {
+    setMintsTodayCount(0);
+    mintsTodayRef.current = 0;
+    setError(null);
   };
 
   const activeTargetDifficulty = DIFFICULTY_PRESETS[difficultyPreset].targetHex;
@@ -265,7 +281,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
   };
 
   // Continuous Auto-Mining: DO NOT stop workers when a block is found!
-  // Advance to the next round across all workers and credit the mined block immediately.
+  // Advance to the next round across all workers and credit the mined block immediately,
+  // unless the 24h anti-Sybil cap (10/10 standard or 20/20 Overclock) is reached.
   const handleSuccess = async (nonce: string, winningHash: string, solvedRound?: number) => {
     if (solvedRound && solvedRound < roundRef.current) {
       return; // Another thread already solved this round
@@ -274,17 +291,26 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
     roundRef.current += 1;
     bestHashBigRef.current = null;
 
-    // Broadcast NEW_ROUND to all active workers so they keep mining non-stop
-    workersRef.current.forEach((w) => {
-      w.postMessage({
-        type: 'NEW_ROUND',
-        round: roundRef.current,
-        difficulty: DIFFICULTY_PRESETS[difficultyPreset].targetHex,
-      });
-    });
+    const nextDailyCount = mintsTodayRef.current + 1;
+    mintsTodayRef.current = nextDailyCount;
+    setMintsTodayCount(nextDailyCount);
 
-    setLastWinningNonce(nonce);
-    setLastWinningHash(winningHash);
+    if (nextDailyCount >= dailyCapRef.current) {
+      stopMining();
+      setVaultStatus(
+        `Daily Anti-Sybil Cap Reached (${nextDailyCount}/${dailyCapRef.current} blocks). Burn 50 SBLAKE for 2x Overclock (20/day) or click Reset Test Cap.`
+      );
+    } else {
+      // Broadcast NEW_ROUND to all active workers so they keep mining non-stop
+      workersRef.current.forEach((w) => {
+        w.postMessage({
+          type: 'NEW_ROUND',
+          round: roundRef.current,
+          difficulty: DIFFICULTY_PRESETS[difficultyPreset].targetHex,
+        });
+      });
+    }
+
     setBestHashSoFar(winningHash);
 
     const shieldedNow = isShieldedRef.current;
@@ -296,12 +322,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
         brotherId || undefined,
         autoSignRef.current
       );
-      setLastMint(res.transaction_hash);
-      setLastMintOnChain(Boolean(res.isOnChain));
       setBlocksMinedSession((prev) => prev + 1);
-      if (res.commitment) {
-        setLastCommitment(res.commitment);
-      }
 
       const proofEntry: QueuedBlockProof = {
         round: completedRound,
@@ -334,8 +355,6 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
     setError(null);
     try {
       const res = await batchSettleMinedBlocks(account, unsettled);
-      setLastMint(res.transaction_hash);
-      setLastMintOnChain(true);
       setMinedBlocksFeed((prev) =>
         prev.map((b) => ({ ...b, settledOnChain: true, txHash: res.transaction_hash }))
       );
@@ -351,8 +370,6 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
     100,
     Math.max(0, ((timeline.mintsInEra) / (timeline.mintsInEra + timeline.mintsUntilHalving || 900000)) * 100)
   );
-
-  const isLiveSepoliaContract = CONTRACT_ADDRESS && !CONTRACT_ADDRESS.startsWith("0x0123456789");
 
   return (
     <div className="space-y-6">
@@ -435,11 +452,25 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
             value={`${(shieldedBalanceTotal + Number(publicBalance)).toFixed(2)} SBLAKE`} 
             subValue={`🔒 ${shieldedBalanceTotal.toFixed(1)} Shielded | 💳 ${publicBalance} Public`} 
           />
-          <Metric
-            label="Auto-Mined Blocks"
-            value={`${blocksMinedSession} Blocks`}
-            subValue={`+${isShieldedMode ? '11.5' : '10'} SBLAKE / Block (Non-Stop)`}
-          />
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-500 tracking-widest uppercase font-mono">DAILY CAP &amp; BLOCKS</span>
+              {mintsTodayCount >= dailyCapLimit && (
+                <button
+                  onClick={handleResetDailyTestCap}
+                  className="text-[10px] font-mono text-[#00f3ff] hover:underline font-bold"
+                >
+                  Reset Test Cap
+                </button>
+              )}
+            </div>
+            <div className="text-xl font-black text-white">
+              {mintsTodayCount} / {dailyCapLimit} Today
+            </div>
+            <div className="text-[10px] text-gray-500 font-mono">
+              {blocksMinedSession} Session Blocks (+{isShieldedMode ? '11.5' : '10'} SB)
+            </div>
+          </div>
         </div>
 
         {/* Live Proof-of-Work Hash Inspector & Difficulty Selector */}

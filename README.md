@@ -85,9 +85,34 @@ StarkBlake includes a **1-Click Sepolia Contract Deployer** (`src/components/Con
 * **Upgradeable & Configurable On-Chain**: Supports `upgrade(new_class_hash)` via `replace_class_syscall`, `set_halving_interval`, `set_beta_config`, and `set_revenue_shares`.
 
 ### Current Compiled Artifacts (`contracts/src/sblake.cairo`)
-* **Sierra Class Hash**: `0x1287c5cce2f2c41d3806c196ed87c58e0968e0cf0fd482b872621b54778e391`
-* **CASM Class Hash**: `0x71a32f7e84351096cba593526d2be781d995b2d0406e0d29aecc2dbea234b94`
+* **Sierra Class Hash**: `0x38c94007b9cf8bfaa7d9e12259a89d979e5df48d9fca8138f7d15a6db178a25`
+* **CASM Class Hash**: `0x7f0267821a43f89f7339c5e31f105a485b0a9ff0353df06970c395d37ad30e7`
 * **Sepolia Relayer Account**: `0x35260a1162058d98cda528a7e7484195fda550acc5db70a840e0b89339a1f07`
+
+---
+
+## 🌐 BlakeVPN Client, Chrome Extension & 1-Click VPS Node Runner
+
+### 1. BlakeVPN Chrome / Brave Extension (`/extension`)
+We include a ready-to-load **Manifest V3 Browser Proxy Extension** (`extension/manifest.json`, `extension/background.js`, `extension/popup.html`, `extension/popup.js`):
+1. Open Chrome or Brave and go to `chrome://extensions`.
+2. Toggle **Developer mode** ON in the top-right corner.
+3. Click **Load unpacked** and select the `extension/` folder in this repository.
+4. Select an exit region (`EU-WEST-1`, `US-EAST-1`, `AP-SE-1`) or enter your custom VPS `IP:1080` and click **ACTIVATE UNLINKABLE PROXY**.
+
+### 2. 1-Click VPS Host & Node Runner (`/node-runner`)
+Turn any Ubuntu 22.04+ or Debian 12 VPS into a bonded **BlakeNode WireGuard (`51820/udp`) + SOCKS5 (`1080/tcp`) Relay** in under 60 seconds:
+
+```bash
+# Option A: 1-Click Automated Bash VPS Installer
+curl -sSL https://raw.githubusercontent.com/fearmexxx/blake/master/node-runner/install-vps.sh | \
+  sudo STARKNET_OPERATOR="0xYOUR_STARKNET_WALLET" \
+  BLAKE_REGION="EU-WEST-1" \
+  WG_PORT="51820" SOCKS_PORT="1080" bash
+
+# Option B: Docker Compose Verifier & Telemetry Daemon (port 8088/tcp health API)
+cd node-runner && STARKNET_OPERATOR="0xYOUR_STARKNET_WALLET" BLAKE_REGION="EU-WEST-1" docker compose up -d
+```
 
 ---
 
