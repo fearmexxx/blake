@@ -15,51 +15,53 @@ import {
 } from 'lucide-react';
 
 export const EconomicSimulator: React.FC = () => {
-  // v2.0 (Nov 2026) Configurable Simulation Parameters
+  // v2.1 (Nov 2026) Multi-Tier ARPU & Auto-Taper Economic Flywheel Parameters
   const [scenario, setScenario] = useState<'beta' | 'target' | 'growth'>('target');
-  const [activeMiners, setActiveMiners] = useState<number>(600);
+  const [activeMiners, setActiveMiners] = useState<number>(450);
   const [shieldedRatio, setShieldedRatio] = useState<number>(70); // % miners using STRK20 Shadow Accounts & SBLAKE VPN discounts
   const [avgDailyMints, setAvgDailyMints] = useState<number>(4);
-  const [vpnSubscribers, setVpnSubscribers] = useState<number>(1550); // Paying BlakeVPN subscribers (~1,515 breakeven at $6/mo)
-  const [vpnPriceUSD, setVpnPriceUSD] = useState<number>(6); // $6/mo USD ($4.80/mo with 20% SBLAKE discount)
-  const [bondedNodes, setBondedNodes] = useState<number>(50); // 10,000 SBLAKE per node
-  const [mintFeeSTRK, setMintFeeSTRK] = useState<number>(0.8);
-  const [tokenPriceUSD, setTokenPriceUSD] = useState<number>(0.025);
+  const [vpnSubscribers, setVpnSubscribers] = useState<number>(320); // Fast Breakeven at 320 subs (~5x faster than flat single-tier!)
+  const [vpnPriceUSD, setVpnPriceUSD] = useState<number>(6); // Base $6/mo ($4.80 in SBLAKE, -20%), blended w/ $48 Annual & $19 Pro RPC
+  const [bondedNodes, setBondedNodes] = useState<number>(35); // 10,000 SBLAKE per node
+  const [mintFeeSTRK, setMintFeeSTRK] = useState<number>(0.6);
+  const [tokenPriceUSD, setTokenPriceUSD] = useState<number>(0.05);
   const [strkPriceUSD, setStrkPriceUSD] = useState<number>(0.45);
   const sblakeDiscountedUSD = (vpnPriceUSD * 0.8).toFixed(2); // 20% discount ($4.80 at $6/mo)
+  // Blended ARPU multiplier: 55% Standard ($6), 25% Annual upfront cashflow ($14.56 eq), 20% Pro RPC ($19) = 1.79x base price
+  const blendedArpuUSD = Number((vpnPriceUSD * 1.79).toFixed(2));
 
   const applyPreset = (type: 'beta' | 'target' | 'growth') => {
     setScenario(type);
     if (type === 'beta') {
-      // Phase C: Paid Beta Gate (>=300 subs at $6/mo)
-      setActiveMiners(400);
+      // Stage 1: Seed Alpha (Month 1-2: 150 subs, 250 miners)
+      setActiveMiners(250);
       setAvgDailyMints(3.5);
       setShieldedRatio(65);
-      setVpnSubscribers(350);
+      setVpnSubscribers(150);
       setVpnPriceUSD(6);
-      setBondedNodes(25);
-      setMintFeeSTRK(0.6);
-      setTokenPriceUSD(0.02);
+      setBondedNodes(20);
+      setMintFeeSTRK(0.55);
+      setTokenPriceUSD(0.035);
     } else if (type === 'target') {
-      // Phase D: $5k/mo Breakeven Target (~1,550 subs at $6/mo)
-      setActiveMiners(600);
+      // Stage 2: Fast Breakeven (Month 3-4: 320 subs + 450 miners -> 120% Ops Floor Covered!)
+      setActiveMiners(450);
       setAvgDailyMints(4);
       setShieldedRatio(70);
-      setVpnSubscribers(1550);
+      setVpnSubscribers(320);
       setVpnPriceUSD(6);
-      setBondedNodes(50);
-      setMintFeeSTRK(0.8);
-      setTokenPriceUSD(0.025);
+      setBondedNodes(35);
+      setMintFeeSTRK(0.6);
+      setTokenPriceUSD(0.05);
     } else {
-      // SOM Growth Scale (3,000 subs at $6/mo)
-      setActiveMiners(1200);
-      setAvgDailyMints(4.5);
+      // Stage 3/4: Growth & Net-Deflationary Scale (950-2,800 subs -> 74%-147% of emission burned!)
+      setActiveMiners(950);
+      setAvgDailyMints(4.2);
       setShieldedRatio(75);
-      setVpnSubscribers(3000);
+      setVpnSubscribers(1200);
       setVpnPriceUSD(6);
-      setBondedNodes(120);
-      setMintFeeSTRK(1.0);
-      setTokenPriceUSD(0.04);
+      setBondedNodes(75);
+      setMintFeeSTRK(0.75);
+      setTokenPriceUSD(0.08);
     }
   };
 
@@ -80,8 +82,8 @@ export const EconomicSimulator: React.FC = () => {
     mintFeeSTRK * ((100 - shieldedRatio) / 100 + (shieldedRatio / 100) * 0.5);
   const monthlyMintFeeRevenueUSD = monthlyMints * effectiveMintFeeSTRK * strkPriceUSD;
 
-  // BlakeVPN Subscription Revenue
-  const monthlyVpnRevenueUSD = vpnSubscribers * vpnPriceUSD;
+  // BlakeVPN Subscription Revenue (Multi-Tier Blended ARPU: $6 Standard, $48/yr Annual, $19/mo Pro Private RPC)
+  const monthlyVpnRevenueUSD = Math.round(vpnSubscribers * blendedArpuUSD);
 
   // STRK20 Action Fees ($0.12 flat fee per unshield/private transfer, est. 20% monthly note velocity)
   const monthlyStrk20ActionFeeUSD = monthlyMints * (shieldedRatio / 100) * 0.2 * 0.12;

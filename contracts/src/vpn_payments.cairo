@@ -136,16 +136,24 @@ pub mod VpnPayments {
         self.ops_treasury.write(ops_treasury);
         self.node_pool.write(node_pool);
         self.buyback_vault.write(buyback_vault);
-        // v2.0 defaults: 55% ops / 30% nodes / 15% buyback; SBLAKE: 20% discount, 30% burned
+        // v2.1 defaults: 55% ops / 30% nodes / 15% buyback; SBLAKE: 20% discount, 50% burned
         self.ops_bps.write(5500);
         self.node_bps.write(3000);
         self.buyback_bps.write(1500);
         self.sblake_discount_bps.write(2000);
-        self.sblake_burn_bps.write(3000);
-        // Plan #1: $6.00 / 30 days
+        self.sblake_burn_bps.write(5000);
+        // Plan #1: Standard Consumer Monthly ($6.00 / 30 days -> $4.80 in SBLAKE)
         self.plan_price_e6.entry(1).write(6_000000);
         self.plan_duration.entry(1).write(2_592_000);
         self.plan_active.entry(1).write(true);
+        // Plan #2: Annual Saver Pre-Pay ($48.00 / 365 days = $4/mo -> $38.40 in SBLAKE)
+        self.plan_price_e6.entry(2).write(48_000000);
+        self.plan_duration.entry(2).write(31_536_000);
+        self.plan_active.entry(2).write(true);
+        // Plan #3: Pro Trader & Starknet Private RPC Pass ($19.00 / 30 days -> $15.20 in SBLAKE)
+        self.plan_price_e6.entry(3).write(19_000000);
+        self.plan_duration.entry(3).write(2_592_000);
+        self.plan_active.entry(3).write(true);
     }
 
     #[abi(embed_v0)]

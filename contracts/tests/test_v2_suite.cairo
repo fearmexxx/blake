@@ -269,9 +269,9 @@ fn test_vpn_payments_usd_split_and_sblake_20pct_discount() {
     stop_cheat_caller_address(vpn_addr);
 
     assert(vpn.is_session_active(0x999999_u256), 'SBLAKE session active');
-    // 30% of 48 SBLAKE = 14.4 SBLAKE burned permanently
+    // 50% of 48 SBLAKE = 24 SBLAKE burned permanently
     let burned = ISBlakeTokenDispatcher { contract_address: token_addr }.total_burned();
-    assert(burned == 14_400000000000000000_u256, '14.4 SBLAKE burned');
+    assert(burned == 24_000000000000000000_u256, '24 SBLAKE burned');
 }
 
 #[test]
