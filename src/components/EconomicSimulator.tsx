@@ -15,47 +15,48 @@ import {
 } from 'lucide-react';
 
 export const EconomicSimulator: React.FC = () => {
-  // Draft 1.1 (Oct 2026) Configurable Simulation Parameters
+  // v2.0 (Nov 2026) Configurable Simulation Parameters
   const [scenario, setScenario] = useState<'beta' | 'target' | 'growth'>('target');
   const [activeMiners, setActiveMiners] = useState<number>(600);
-  const [shieldedRatio, setShieldedRatio] = useState<number>(70); // % miners locking in STRK20 >= 7 days (+15% reward & 50% fee discount)
-  const [avgDailyMints, setAvgDailyMints] = useState<number>(4); // avg mints/miner/day (~876k mints/yr at 600 miners)
-  const [vpnSubscribers, setVpnSubscribers] = useState<number>(650); // Paying BlakeVPN subscribers
-  const [vpnPriceUSD, setVpnPriceUSD] = useState<number>(8); // $5 Beta min, $8-$10 Post-Beta target
+  const [shieldedRatio, setShieldedRatio] = useState<number>(70); // % miners using STRK20 Shadow Accounts & SBLAKE VPN discounts
+  const [avgDailyMints, setAvgDailyMints] = useState<number>(4);
+  const [vpnSubscribers, setVpnSubscribers] = useState<number>(1550); // Paying BlakeVPN subscribers (~1,515 breakeven at $6/mo)
+  const [vpnPriceUSD, setVpnPriceUSD] = useState<number>(6); // $6/mo USD ($4.80/mo with 20% SBLAKE discount)
   const [bondedNodes, setBondedNodes] = useState<number>(50); // 10,000 SBLAKE per node
-  const [mintFeeSTRK, setMintFeeSTRK] = useState<number>(0.8); // 0.5 - 1.0 STRK protocol fee per mint
+  const [mintFeeSTRK, setMintFeeSTRK] = useState<number>(0.8);
   const [tokenPriceUSD, setTokenPriceUSD] = useState<number>(0.025);
   const [strkPriceUSD, setStrkPriceUSD] = useState<number>(0.45);
+  const sblakeDiscountedUSD = (vpnPriceUSD * 0.8).toFixed(2); // 20% discount ($4.80 at $6/mo)
 
   const applyPreset = (type: 'beta' | 'target' | 'growth') => {
     setScenario(type);
     if (type === 'beta') {
-      // Scenario A: Minimum Conservative (Invited Beta)
+      // Phase C: Paid Beta Gate (>=300 subs at $6/mo)
       setActiveMiners(400);
       setAvgDailyMints(3.5);
       setShieldedRatio(65);
-      setVpnSubscribers(120);
-      setVpnPriceUSD(5);
-      setBondedNodes(20);
+      setVpnSubscribers(350);
+      setVpnPriceUSD(6);
+      setBondedNodes(25);
       setMintFeeSTRK(0.6);
       setTokenPriceUSD(0.02);
     } else if (type === 'target') {
-      // Scenario B: Balanced Target (Post-Beta)
+      // Phase D: $5k/mo Breakeven Target (~1,550 subs at $6/mo)
       setActiveMiners(600);
       setAvgDailyMints(4);
       setShieldedRatio(70);
-      setVpnSubscribers(650);
-      setVpnPriceUSD(8);
+      setVpnSubscribers(1550);
+      setVpnPriceUSD(6);
       setBondedNodes(50);
       setMintFeeSTRK(0.8);
       setTokenPriceUSD(0.025);
     } else {
-      // Scenario C: Growth Scale
+      // SOM Growth Scale (3,000 subs at $6/mo)
       setActiveMiners(1200);
       setAvgDailyMints(4.5);
       setShieldedRatio(75);
-      setVpnSubscribers(2500);
-      setVpnPriceUSD(9);
+      setVpnSubscribers(3000);
+      setVpnPriceUSD(6);
       setBondedNodes(120);
       setMintFeeSTRK(1.0);
       setTokenPriceUSD(0.04);
@@ -88,17 +89,17 @@ export const EconomicSimulator: React.FC = () => {
   const totalMonthlyRevenueUSD =
     monthlyMintFeeRevenueUSD + monthlyVpnRevenueUSD + monthlyStrk20ActionFeeUSD;
 
-  // --- 3. Revenue Allocation Split (60% Ops / 25% Buyback & Burn / 15% Yield & Node Incentives) ---
-  const opsCostFloorUSD = 5000; // $3k-$4k 15-20 nodes + $1k-$1.5k lean marketing + $500-$1k contingency
-  const rawOpsAllocationUSD = totalMonthlyRevenueUSD * 0.6;
-  // Taper rule: Once $5,000/mo Ops Floor is comfortably covered, excess tapers into Buyback & Burn
+  // --- 3. v2.0 Revenue Allocation Split (55% Ops / 30% Stable Node Payouts / 15% Ekubo Buyback & Burn) ---
+  const opsCostFloorUSD = 5000; // ~1,515 paying subs at $6/mo ($5,000 / ($6 * 0.55))
+  const rawOpsAllocationUSD = totalMonthlyRevenueUSD * 0.55;
+  // Taper rule: Once $5,000/mo Ops Floor is comfortably covered, excess tapers into Ekubo TWAP Buyback & Burn
   const effectiveOpsAllocationUSD =
     rawOpsAllocationUSD > 6500 ? 6000 + (rawOpsAllocationUSD - 6000) * 0.5 : rawOpsAllocationUSD;
   const opsFloorCoveragePct = Math.min(200, (effectiveOpsAllocationUSD / opsCostFloorUSD) * 100);
 
   const buybackBurnUSD =
-    totalMonthlyRevenueUSD * 0.25 + Math.max(0, rawOpsAllocationUSD - effectiveOpsAllocationUSD);
-  const shieldedAndNodeYieldUSD = totalMonthlyRevenueUSD * 0.15;
+    totalMonthlyRevenueUSD * 0.15 + Math.max(0, rawOpsAllocationUSD - effectiveOpsAllocationUSD);
+  const shieldedAndNodeYieldUSD = totalMonthlyRevenueUSD * 0.3;
 
   // Monthly Tokens Burned (Ekubo TWAP Buyback + 0.25% STRK20 Unshield Burn + Overclock/Stealth ID Utility Burns)
   const monthlyTwapBurnTokens = tokenPriceUSD > 0 ? buybackBurnUSD / tokenPriceUSD : 0;
@@ -126,11 +127,11 @@ export const EconomicSimulator: React.FC = () => {
           <div className="flex items-center gap-2">
             <BarChart3 size={20} className="text-[#00f3ff]" />
             <h2 className="text-lg font-black text-white tracking-wide uppercase">
-              BlakeVPN & BlakeNode Economic Flywheel Simulator (Draft 1.1)
+              BlakeVPN &amp; BlakeNode Economic Flywheel Simulator (v2.0)
             </h2>
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            Auditing the $5,000/mo Ops Cost Floor, 60/25/15 Revenue Split, 10 SBLAKE Era-1 Emission, and Year-1 Free Float (&le;45%).
+            Auditing the $6/mo VPN ($4.80 in SBLAKE, -20%), 55/30/15 Revenue Split, 8% Vested Dev Fee (5–10% band), and $5,000/mo Ops Floor.
           </p>
         </div>
 
@@ -204,7 +205,7 @@ export const EconomicSimulator: React.FC = () => {
             className="w-full accent-[#00f3ff] cursor-pointer"
           />
           <div className="text-[10px] text-gray-500">
-            At ${vpnPriceUSD}/mo subscription (${monthlyVpnRevenueUSD.toLocaleString()}/mo)
+            At ${vpnPriceUSD}/mo USD or ${sblakeDiscountedUSD}/mo in SBLAKE (-20% discount) (${monthlyVpnRevenueUSD.toLocaleString()}/mo)
           </div>
         </div>
 

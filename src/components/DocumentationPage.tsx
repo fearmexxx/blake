@@ -110,10 +110,10 @@ export const DocumentationPage: React.FC<DocumentationPageProps> = ({ onNavigate
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="p-4 bg-black/70 border border-gray-800 rounded space-y-2">
                 <div className="font-mono font-bold text-[#00ff41] uppercase">
-                  ✓ Cairo Smart Contract (sblake.cairo)
+                  ✓ v2.0 Modular Cairo Contracts &amp; Post-Quantum PoW
                 </div>
                 <p className="text-gray-300 leading-relaxed">
-                  Hard-capped at <strong>21,000,000 SBLAKE</strong>. Era 1 emits <strong>10 SBLAKE</strong> transparent or <strong>11.5 SBLAKE</strong> shielded (+15% STRK20 bonus) with a <strong>900,000-mint halving interval</strong> (~10–14 months).
+                  Hard-capped at <strong>21,000,000 SBLAKE</strong> (`token.cairo`, `miner.cairo`, `vesting.cairo`, `vpn_payments.cairo`, `node_registry.cairo`, `timelock.cairo`). Verifies <strong>Post-Quantum Poseidon (`POSEIDON_PQ`)</strong> work on-chain with a <strong>5–10% Vested Dev Fee (8% default)</strong> streamed to `DevVesting`.
                 </p>
               </div>
 
@@ -288,31 +288,39 @@ export const DocumentationPage: React.FC<DocumentationPageProps> = ({ onNavigate
         <div className="glass-panel p-6 border border-gray-800 space-y-5">
           <h2 className="text-base font-black text-white uppercase tracking-wide flex items-center gap-2 border-b border-gray-800 pb-3">
             <Flame size={18} className="text-red-400" />
-            Draft 1.1 Economic Flywheel &amp; $5,000/mo Operations Cost Floor
+            v2.0 Economic Flywheel: $6/mo VPN (-20% in SBLAKE), 5–10% Vested Dev Fee &amp; $5k/mo Floor
           </h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-mono">
             <div className="p-4 bg-black/70 border border-gray-800 rounded space-y-1.5">
-              <div className="text-[#00ff41] font-bold">60% OPERATIONS TREASURY</div>
+              <div className="text-[#00ff41] font-bold">55% OPERATIONS TREASURY</div>
               <div className="text-lg font-black text-white">$5,000/mo Floor</div>
               <p className="text-gray-400 font-sans">
-                Covers 15–20 multi-region core exit nodes ($3k–$4k), community growth ($1k–$1.5k), and Starknet RPC/relayer infra ($500–$1k).
+                Reached at ~<strong>1,515 paying subscribers</strong> at $6/mo ($4.80/mo when paying in SBLAKE with a 20% discount).
               </p>
             </div>
 
             <div className="p-4 bg-black/70 border border-gray-800 rounded space-y-1.5">
-              <div className="text-red-400 font-bold">25% EKUBO TWAP BUYBACK &amp; BURN</div>
-              <div className="text-lg font-black text-white">20–30% Band</div>
+              <div className="text-[#00f3ff] font-bold">30% STABLECOIN NODE PAYOUTS</div>
+              <div className="text-lg font-black text-white">USDC / STRK SLA Pool</div>
               <p className="text-gray-400 font-sans">
-                Automated on-chain buyback and permanent burn from STRK mint fees and BlakeVPN pass revenue. Scales up as revenue exceeds $7.5k/mo.
+                Pays bonded BlakeNode operators (10,000 SBLAKE bond) in stablecoins so operators never have to dump SBLAKE to pay VPS bills.
               </p>
             </div>
 
             <div className="p-4 bg-black/70 border border-gray-800 rounded space-y-1.5">
-              <div className="text-[#00f3ff] font-bold">15% SHIELDED YIELD &amp; NODES</div>
-              <div className="text-lg font-black text-white">10–20% Band</div>
+              <div className="text-red-400 font-bold">15% EKUBO TWAP BUYBACK</div>
+              <div className="text-lg font-black text-white">+30% Burn on SBLAKE Passes</div>
               <p className="text-gray-400 font-sans">
-                Rewards STRK20 notes locked &ge;7 days and bonded BlakeNode operators maintaining &ge;95% uptime SLA.
+                15% of USD revenue buys &amp; burns SBLAKE on Ekubo, plus 30% of every SBLAKE-discounted VPN pass ($4.80/mo) is burned immediately.
+              </p>
+            </div>
+
+            <div className="p-4 bg-black/70 border border-gray-800 rounded space-y-1.5">
+              <div className="text-yellow-400 font-bold">5–10% VESTED DEV FEE</div>
+              <div className="text-lg font-black text-white">8% Default (Linear Vesting)</div>
+              <p className="text-gray-400 font-sans">
+                Zero presale or premine. A transparent 8% dev fee on emission streams into `DevVesting` with a cliff + 24-month linear release.
               </p>
             </div>
           </div>

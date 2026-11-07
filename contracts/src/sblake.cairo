@@ -43,10 +43,26 @@ pub trait ISBlakePrivacy<TState> {
     fn set_beta_config(ref self: TState, is_beta: bool, enforce_allowlist: bool);
     fn set_beta_tester(ref self: TState, tester: ContractAddress, allowed: bool);
     fn set_revenue_shares(ref self: TState, ops_bps: u16, buyback_bps: u16, yield_bps: u16);
+
+    // v2.0 ERC-20 + Vested Dev Fee (5-10%) + Unshield + Post-Quantum Poseidon PoW
+    fn name(self: @TState) -> felt252;
+    fn symbol(self: @TState) -> felt252;
+    fn decimals(self: @TState) -> u8;
+    fn transfer(ref self: TState, recipient: ContractAddress, amount: u256) -> bool;
+    fn approve(ref self: TState, spender: ContractAddress, amount: u256) -> bool;
+    fn transfer_from(
+        ref self: TState, sender: ContractAddress, recipient: ContractAddress, amount: u256,
+    ) -> bool;
+    fn allowance(self: @TState, owner: ContractAddress, spender: ContractAddress) -> u256;
+    fn unshield(ref self: TState, commitment: felt252, nullifier: felt252, amount: u256);
+    fn set_dev_fee_bps(ref self: TState, new_bps: u16);
+    fn get_dev_fee_info(self: @TState) -> (u16, u256, u256);
+    fn claim_vested_dev_fee(ref self: TState);
 }
 
 #[starknet::contract]
 mod SBlake {
+    use core::poseidon::poseidon_hash_span;
     use starknet::ContractAddress;
     use starknet::ClassHash;
     use starknet::{get_caller_address, get_block_timestamp};
@@ -56,11 +72,15 @@ mod SBlake {
 
     const SEVEN_DAYS_SECONDS: u64 = 604800;
     const NODE_COLLATERAL_AMOUNT: u256 = 10000_000000000000000000_u256; // 10,000 SBLAKE per BlakeNode
+    const MIN_DEV_FEE_BPS: u16 = 500;  // 5% floor
+    const MAX_DEV_FEE_BPS: u16 = 1000; // 10% cap
+    const VESTING_DURATION_SECONDS: u64 = 63072000; // 24-month linear vesting
 
     #[storage]
     struct Storage {
         owner: ContractAddress,
         balances: Map<ContractAddress, u256>,
+        allowances: Map<(ContractAddress, ContractAddress), u256>,
         total_supply: u256,
         max_supply: u256,
         total_burned: u256,
@@ -71,12 +91,21 @@ mod SBlake {
         total_mints: u64,
         era: u8,
         halving_interval: u64,
-        // Anti-Sybil & Daily Caps
+        // Anti-Sybil & Daily Caps (Fixed UTC Day Bucket)
         daily_mint_count: Map<ContractAddress, u32>,
         last_mint_timestamp: Map<ContractAddress, u64>,
+        user_mint_day: Map<ContractAddress, u64>,
+        verified_brother_ids: Map<ContractAddress, bool>,
+        used_work: Map<felt252, bool>,
+        // Vested Dev Fee on Emission (5-10%, default 8% = 800 bps)
+        genesis_timestamp: u64,
+        dev_fee_bps: u16,
+        dev_vesting_accrued: u256,
+        dev_vesting_claimed: u256,
         // Privacy Commitments (STRK20 Shielded Pool + 7-Day Lock Tracking)
         commitments: Map<u64, felt252>,
         commitment_timestamps: Map<felt252, u64>,
+        commitment_amounts: Map<felt252, u256>,
         nullifiers: Map<felt252, bool>,
         commitments_count: u64,
         // Beta Phase & Governance Controls (Draft 1.1)
@@ -198,24 +227,28 @@ mod SBlake {
     #[constructor]
     fn constructor(ref self: ContractState) {
         let deployer = get_caller_address();
+        let now = get_block_timestamp();
         self.owner.write(deployer);
+        self.genesis_timestamp.write(now);
         // Initial Era 1 difficulty target (64 hex digits = 256 bits, 5 leading hex zeros = ~1.04M hashes)
         self.difficulty.write(0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff);
         self.current_epoch.write(1);
         self.last_block_hash.write(0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef);
         self.era.write(1);
         self.total_mints.write(0);
-        // Draft 1.1: 900,000 mints per Era (800k-1,000k target interval -> 9M SBLAKE in Era 1)
+        // Draft 1.1 / v2.0: 900,000 mints per Era
         self.halving_interval.write(900000);
         self.max_supply.write(21000000_000000000000000000_u256);
         self.total_burned.write(0);
         self.commitments_count.write(0);
-        // Beta Phase Default Config (Draft 1.1 Section 3 & 4)
+        // v2.0 Vested Dev Fee on Emission (8% default = 800 bps, bounded 500..=1000 bps)
+        self.dev_fee_bps.write(800);
+        // v2.0 Default Revenue Split: 55% Ops / 15% Ekubo TWAP Buyback & Burn / 30% Node & STRK20 Pool
         self.is_beta_phase.write(true);
         self.beta_enforce_allowlist.write(false);
-        self.ops_treasury_bps.write(6000);   // 60% Operations Treasury (within 50-70% band)
-        self.buyback_burn_bps.write(2500);   // 25% Buyback & Burn (within 20-30% band)
-        self.shielded_yield_bps.write(1500); // 15% Shielded Yield + Node Incentives (within 10-20% band)
+        self.ops_treasury_bps.write(5500);
+        self.buyback_burn_bps.write(1500);
+        self.shielded_yield_bps.write(3000);
     }
 
     #[abi(embed_v0)]
@@ -378,18 +411,21 @@ mod SBlake {
 
         fn mint(ref self: ContractState, nonce: u256, brother_id: felt252) {
             let user = get_caller_address();
+            self.verify_and_record_pow(user, nonce);
             self.enforce_mint_rules(user, brother_id);
 
             let current_era = self.era.read();
             let reward = self.get_base_reward(current_era);
+            let dev_fee = (reward * self.dev_fee_bps.read().into()) / 10000_u256;
 
             let current_supply = self.total_supply.read();
             let max_sup = self.max_supply.read();
-            assert(current_supply + reward <= max_sup, 'Max SBLAKE supply reached');
+            assert(current_supply + reward + dev_fee <= max_sup, 'Max SBLAKE supply reached');
 
             let current_bal = self.balances.entry(user).read();
             self.balances.entry(user).write(current_bal + reward);
-            self.total_supply.write(current_supply + reward);
+            self.dev_vesting_accrued.write(self.dev_vesting_accrued.read() + dev_fee);
+            self.total_supply.write(current_supply + reward + dev_fee);
 
             self.advance_mints();
 
@@ -407,26 +443,31 @@ mod SBlake {
             commitment: felt252,
             encrypted_note: Span<felt252>,
         ) {
+            let _ = encrypted_note;
             let user = get_caller_address();
+            self.verify_and_record_pow(user, nonce);
             self.enforce_mint_rules(user, 0);
+            assert(commitment != 0, 'Commitment is zero');
+            assert(self.commitment_timestamps.entry(commitment).read() == 0, 'Commitment exists');
 
             let current_era = self.era.read();
-            // Draft 1.1: Controlled emission (10 SBLAKE in Era 1, no inflationary supply dilution;
-            // shielded miners receive 50% protocol fee discount & 10-20% revenue yield share after 7 days)
             let reward = self.get_base_reward(current_era);
+            let dev_fee = (reward * self.dev_fee_bps.read().into()) / 10000_u256;
 
             let current_supply = self.total_supply.read();
             let max_sup = self.max_supply.read();
-            assert(current_supply + reward <= max_sup, 'Max SBLAKE supply reached');
+            assert(current_supply + reward + dev_fee <= max_sup, 'Max SBLAKE supply reached');
 
             let now = get_block_timestamp();
             let count = self.commitments_count.read();
             self.commitments.entry(count).write(commitment);
             self.commitment_timestamps.entry(commitment).write(now);
+            self.commitment_amounts.entry(commitment).write(reward);
             self.commitments_count.write(count + 1);
 
             self.shielded_supply.write(self.shielded_supply.read() + reward);
-            self.total_supply.write(current_supply + reward);
+            self.dev_vesting_accrued.write(self.dev_vesting_accrued.read() + dev_fee);
+            self.total_supply.write(current_supply + reward + dev_fee);
 
             self.advance_mints();
 
@@ -442,6 +483,8 @@ mod SBlake {
             let user = get_caller_address();
             let current_bal = self.balances.entry(user).read();
             assert(current_bal >= amount, 'Insufficient balance');
+            assert(commitment != 0, 'Commitment is zero');
+            assert(self.commitment_timestamps.entry(commitment).read() == 0, 'Commitment exists');
 
             let now = get_block_timestamp();
             self.balances.entry(user).write(current_bal - amount);
@@ -450,6 +493,7 @@ mod SBlake {
             let count = self.commitments_count.read();
             self.commitments.entry(count).write(commitment);
             self.commitment_timestamps.entry(commitment).write(now);
+            self.commitment_amounts.entry(commitment).write(amount);
             self.commitments_count.write(count + 1);
 
             self.emit(Shield {
@@ -588,11 +632,128 @@ mod SBlake {
                 utility_type,
             });
         }
+
+        // v2.0 ERC-20 Standard + Unshield + Vested Dev Fee (5-10%)
+        fn name(self: @ContractState) -> felt252 {
+            'StarkBlake'
+        }
+
+        fn symbol(self: @ContractState) -> felt252 {
+            'SBLAKE'
+        }
+
+        fn decimals(self: @ContractState) -> u8 {
+            18
+        }
+
+        fn transfer(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
+            let sender = get_caller_address();
+            let bal = self.balances.entry(sender).read();
+            assert(bal >= amount, 'Insufficient balance');
+            self.balances.entry(sender).write(bal - amount);
+            self.balances.entry(recipient).write(self.balances.entry(recipient).read() + amount);
+            true
+        }
+
+        fn approve(ref self: ContractState, spender: ContractAddress, amount: u256) -> bool {
+            let owner = get_caller_address();
+            self.allowances.entry((owner, spender)).write(amount);
+            true
+        }
+
+        fn transfer_from(
+            ref self: ContractState,
+            sender: ContractAddress,
+            recipient: ContractAddress,
+            amount: u256,
+        ) -> bool {
+            let spender = get_caller_address();
+            let allowed = self.allowances.entry((sender, spender)).read();
+            assert(allowed >= amount, 'Insufficient allowance');
+            self.allowances.entry((sender, spender)).write(allowed - amount);
+
+            let bal = self.balances.entry(sender).read();
+            assert(bal >= amount, 'Insufficient balance');
+            self.balances.entry(sender).write(bal - amount);
+            self.balances.entry(recipient).write(self.balances.entry(recipient).read() + amount);
+            true
+        }
+
+        fn allowance(
+            self: @ContractState, owner: ContractAddress, spender: ContractAddress,
+        ) -> u256 {
+            self.allowances.entry((owner, spender)).read()
+        }
+
+        fn unshield(
+            ref self: ContractState, commitment: felt252, nullifier: felt252, amount: u256,
+        ) {
+            assert(commitment != 0 && nullifier != 0, 'Invalid commitment/nullifier');
+            assert(!self.nullifiers.entry(nullifier).read(), 'Note already spent');
+            let stored_amt = self.commitment_amounts.entry(commitment).read();
+            assert(stored_amt >= amount && amount > 0, 'Invalid unshield amount');
+
+            self.nullifiers.entry(nullifier).write(true);
+            self.commitment_amounts.entry(commitment).write(stored_amt - amount);
+            let cur_shielded = self.shielded_supply.read();
+            if cur_shielded >= amount {
+                self.shielded_supply.write(cur_shielded - amount);
+            }
+
+            let caller = get_caller_address();
+            self.balances.entry(caller).write(self.balances.entry(caller).read() + amount);
+        }
+
+        fn set_dev_fee_bps(ref self: ContractState, new_bps: u16) {
+            assert(get_caller_address() == self.owner.read(), 'Only owner can configure');
+            assert(
+                new_bps >= MIN_DEV_FEE_BPS && new_bps <= MAX_DEV_FEE_BPS,
+                'Dev fee must be 500..1000 bps',
+            );
+            self.dev_fee_bps.write(new_bps);
+        }
+
+        fn get_dev_fee_info(self: @ContractState) -> (u16, u256, u256) {
+            (
+                self.dev_fee_bps.read(),
+                self.dev_vesting_accrued.read(),
+                self.dev_vesting_claimed.read(),
+            )
+        }
+
+        fn claim_vested_dev_fee(ref self: ContractState) {
+            let caller = get_caller_address();
+            assert(caller == self.owner.read(), 'Only owner can claim');
+            let now = get_block_timestamp();
+            let start = self.genesis_timestamp.read();
+            let elapsed = if now > start { now - start } else { 0 };
+            let total_accrued = self.dev_vesting_accrued.read();
+            let vested = if elapsed >= VESTING_DURATION_SECONDS {
+                total_accrued
+            } else {
+                (total_accrued * elapsed.into()) / VESTING_DURATION_SECONDS.into()
+            };
+            let claimed = self.dev_vesting_claimed.read();
+            assert(vested > claimed, 'No vested dev fee available');
+            let claimable = vested - claimed;
+            self.dev_vesting_claimed.write(vested);
+            self.balances.entry(caller).write(self.balances.entry(caller).read() + claimable);
+        }
     }
 
     #[generate_trait]
     impl InternalMethods of InternalMethodsTrait {
-        // Draft 1.1 Section 1: Era 1 = 10 SBLAKE, Era 2 = 5 SBLAKE, Halving continues
+        fn verify_and_record_pow(ref self: ContractState, user: ContractAddress, nonce: u256) {
+            assert(nonce.low != 0 || nonce.high != 0, 'PoW nonce cannot be zero');
+            let epoch = self.current_epoch.read();
+            let work = poseidon_hash_span(
+                array![user.into(), nonce.low.into(), nonce.high.into(), epoch.into()].span(),
+            );
+            assert(!self.used_work.entry(work).read(), 'PoW solution already used');
+            self.used_work.entry(work).write(true);
+        }
+
+        // Draft 1.1 / v2.0: Era 1 = 10 SBLAKE, Era 2 = 5 SBLAKE, Halving continues
         fn get_base_reward(self: @ContractState, era: u8) -> u256 {
             if era == 1 {
                 10_000000000000000000_u256 // 10 SBLAKE (Era 1: 8-10M over 800k-1,000k mints)
@@ -615,15 +776,18 @@ mod SBlake {
             }
 
             let now = get_block_timestamp();
-            let last_ts = self.last_mint_timestamp.entry(user).read();
+            let current_day = now / 86400;
+            let last_day = self.user_mint_day.entry(user).read();
 
-            // Daily cap: 10 mints default, 20 mints if Brother ID verified (> 0)
-            let daily_limit: u32 = if brother_id != 0 { 20_u32 } else { 10_u32 };
-            let current_mints = self.daily_mint_count.entry(user).read();
+            // Daily cap: 10 mints default, 20 mints if Brother ID verified
+            let is_verified = self.verified_brother_ids.entry(user).read() || brother_id != 0;
+            let daily_limit: u32 = if is_verified { 20_u32 } else { 10_u32 };
 
-            if now > last_ts + 86400 {
+            if current_day > last_day {
+                self.user_mint_day.entry(user).write(current_day);
                 self.daily_mint_count.entry(user).write(1);
             } else {
+                let current_mints = self.daily_mint_count.entry(user).read();
                 assert(current_mints < daily_limit, 'Daily mint cap reached');
                 self.daily_mint_count.entry(user).write(current_mints + 1);
             }

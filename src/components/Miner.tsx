@@ -42,21 +42,41 @@ interface MinerProps {
   account: any;
 }
 
-const DIFFICULTY_PRESETS: Record<'fast' | 'standard' | 'hard', { label: string; targetHex: string; avgHashes: string }> = {
+type HashAlgorithm = 'POSEIDON_PQ' | 'BLAKE2S_PQ';
+
+const POSEIDON_PRESETS: Record<'fast' | 'standard' | 'hard', { label: string; targetHex: string; avgHashes: string }> = {
   fast: {
-    label: '21-Bit Balanced (~2.1M hashes / 3–8s)',
-    targetHex: '0x000007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-    avgHashes: '~2,097,152',
+    label: 'PQ-Poseidon Fast (~4,096 STARK field hashes / 1–2s)',
+    targetHex: '0x00007fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    avgHashes: '~4,096 (Poseidon felt252)',
   },
   standard: {
-    label: '24-Bit Standard Beta (~16.7M hashes / 20–60s on 5900X / default)',
-    targetHex: '0x000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-    avgHashes: '~16,777,216',
+    label: 'PQ-Poseidon Standard (~32,768 STARK field hashes / 2–5s on 5900X)',
+    targetHex: '0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    avgHashes: '~32,768 (Poseidon felt252)',
   },
   hard: {
-    label: '26-Bit High Diff (~67.1M hashes / 1–3m)',
+    label: 'PQ-Poseidon High Diff (~131,072 STARK field hashes / 8–15s)',
+    targetHex: '0x000003ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    avgHashes: '~131,072 (Poseidon felt252)',
+  },
+};
+
+const BLAKE2S_PRESETS: Record<'fast' | 'standard' | 'hard', { label: string; targetHex: string; avgHashes: string }> = {
+  fast: {
+    label: '21-Bit BLAKE2s (~2.1M hashes / 3–8s)',
+    targetHex: '0x000007ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    avgHashes: '~2,097,152 (BLAKE2s-256)',
+  },
+  standard: {
+    label: '24-Bit BLAKE2s Standard (~16.7M hashes / 20–60s on 5900X)',
+    targetHex: '0x000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    avgHashes: '~16,777,216 (BLAKE2s-256)',
+  },
+  hard: {
+    label: '26-Bit BLAKE2s High Diff (~67.1M hashes / 1–3m)',
     targetHex: '0x0000003fffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
-    avgHashes: '~67,108,864',
+    avgHashes: '~67,108,864 (BLAKE2s-256)',
   },
 };
 
@@ -65,6 +85,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
   const [hashrate, setHashrate] = useState(0);
   const [totalHashes, setTotalHashes] = useState(0);
   const [threads, setThreads] = useState(navigator.hardwareConcurrency || 4);
+  const [hashAlgorithm, setHashAlgorithm] = useState<HashAlgorithm>('POSEIDON_PQ');
   const [difficultyPreset, setDifficultyPreset] = useState<'fast' | 'standard' | 'hard'>('standard');
   const [challenge, setChallenge] = useState<any>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
@@ -201,15 +222,27 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
     setError(null);
   };
 
-  const activeTargetDifficulty = DIFFICULTY_PRESETS[difficultyPreset].targetHex;
+  const activePresets = hashAlgorithm === 'POSEIDON_PQ' ? POSEIDON_PRESETS : BLAKE2S_PRESETS;
+  const activeTargetDifficulty = activePresets[difficultyPreset].targetHex;
 
   const handleDifficultyChange = (preset: 'fast' | 'standard' | 'hard') => {
     setDifficultyPreset(preset);
-    const newTarget = DIFFICULTY_PRESETS[preset].targetHex;
+    const newTarget = activePresets[preset].targetHex;
     bestHashBigRef.current = null;
     setBestHashSoFar(null);
     workersRef.current.forEach((w) => {
-      w.postMessage({ type: 'UPDATE_DIFFICULTY', difficulty: newTarget });
+      w.postMessage({ type: 'UPDATE_DIFFICULTY', difficulty: newTarget, algorithm: hashAlgorithm });
+    });
+  };
+
+  const handleAlgorithmChange = (algo: HashAlgorithm) => {
+    setHashAlgorithm(algo);
+    const presets = algo === 'POSEIDON_PQ' ? POSEIDON_PRESETS : BLAKE2S_PRESETS;
+    const newTarget = presets[difficultyPreset].targetHex;
+    bestHashBigRef.current = null;
+    setBestHashSoFar(null);
+    workersRef.current.forEach((w) => {
+      w.postMessage({ type: 'UPDATE_DIFFICULTY', difficulty: newTarget, algorithm: algo });
     });
   };
 
@@ -247,6 +280,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
       };
 
       worker.postMessage({
+        algorithm: hashAlgorithm,
         wallet: address,
         epoch: challenge.epoch,
         blockHash: challenge.blockHash,
@@ -306,7 +340,8 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
         w.postMessage({
           type: 'NEW_ROUND',
           round: roundRef.current,
-          difficulty: DIFFICULTY_PRESETS[difficultyPreset].targetHex,
+          difficulty: activePresets[difficultyPreset].targetHex,
+          algorithm: hashAlgorithm,
         });
       });
     }
@@ -383,16 +418,47 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
                 <span className={`relative inline-flex rounded-full h-3 w-3 ${isMining ? 'bg-[#00ff41]' : 'bg-gray-500'}`} />
               </span>
               <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                CORE MINER
+                POST-QUANTUM MINER v2.0
                 <span className="text-xs px-2 py-0.5 rounded bg-white/10 text-gray-300 font-mono">
                   ERA {timeline.era}
                 </span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-[#00f3ff]/15 text-[#00f3ff] border border-[#00f3ff]/30 font-mono">
+                  {hashAlgorithm === 'POSEIDON_PQ' ? 'STARK POSEIDON-PQ' : 'BLAKE2S-256 PQ'}
+                </span>
               </h2>
             </div>
-            <p className="text-gray-400 text-sm mt-1">Blake2s Cairo-compatible multi-threaded hashing worker</p>
+            <p className="text-gray-400 text-sm mt-1">
+              Starknet Post-Quantum STARK-native Poseidon &amp; 256-bit BLAKE2s multi-core worker • Mine-to-Subscribe ($6/mo VPN → $4.80 in SBLAKE)
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            {/* Post-Quantum Algorithm Switcher */}
+            <div className="flex items-center bg-black/50 border border-gray-800 rounded-sm p-0.5 font-mono text-[11px]">
+              <button
+                type="button"
+                onClick={() => handleAlgorithmChange('POSEIDON_PQ')}
+                className={`px-2.5 py-1.5 rounded-sm font-bold transition-all ${
+                  hashAlgorithm === 'POSEIDON_PQ'
+                    ? 'bg-[#00f3ff] text-black'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                POSEIDON-PQ (STARK)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAlgorithmChange('BLAKE2S_PQ')}
+                className={`px-2.5 py-1.5 rounded-sm font-bold transition-all ${
+                  hashAlgorithm === 'BLAKE2S_PQ'
+                    ? 'bg-[#00ff41] text-black'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                BLAKE2S-256
+              </button>
+            </div>
+
             {/* STRK20 Privacy Switch */}
             <button
               onClick={() => setIsShieldedMode(!isShieldedMode)}
@@ -403,7 +469,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
               }`}
             >
               <Sparkles size={14} />
-              {isShieldedMode ? "STRK20 SHIELDED (+15%)" : "TRANSPARENT MINT"}
+              {isShieldedMode ? "STRK20 SHIELDED" : "PUBLIC ERC-20"}
             </button>
 
             {/* Threads Selector */}
@@ -445,16 +511,28 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
 
         {/* Live Metrics Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8 pt-6 border-t border-gray-800">
-          <Metric label="Hashrate" value={`${(hashrate / 1000).toFixed(2)} KH/s`} subValue="Multi-core BLAKE2s (Continuous)" />
-          <Metric label="Total Hashes" value={totalHashes.toLocaleString()} subValue="Real Session Hashes" />
+          <Metric
+            label="Hashrate"
+            value={
+              hashAlgorithm === 'POSEIDON_PQ'
+                ? `${(hashrate / 1000).toFixed(2)} KH/s`
+                : `${(hashrate / 1000).toFixed(2)} KH/s`
+            }
+            subValue={
+              hashAlgorithm === 'POSEIDON_PQ'
+                ? 'Poseidon-PQ Field Hashes/sec'
+                : 'Multi-core BLAKE2s-256'
+            }
+          />
+          <Metric label="Total Hashes" value={totalHashes.toLocaleString()} subValue="Post-Quantum Session Work" />
           <Metric 
             label="Your Mined SBLAKE" 
             value={`${(shieldedBalanceTotal + Number(publicBalance)).toFixed(2)} SBLAKE`} 
-            subValue={`🔒 ${shieldedBalanceTotal.toFixed(1)} Shielded | 💳 ${publicBalance} Public`} 
+            subValue={`🔒 ${shieldedBalanceTotal.toFixed(1)} STRK20 | 💳 ${publicBalance} Public`} 
           />
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] text-gray-500 tracking-widest uppercase font-mono">DAILY CAP &amp; BLOCKS</span>
+              <span className="text-[10px] text-gray-500 tracking-widest uppercase font-mono">DAILY CAP &amp; DEV VESTING</span>
               {mintsTodayCount >= dailyCapLimit && (
                 <button
                   onClick={handleResetDailyTestCap}
@@ -468,7 +546,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
               {mintsTodayCount} / {dailyCapLimit} Today
             </div>
             <div className="text-[10px] text-gray-500 font-mono">
-              {blocksMinedSession} Session Blocks (+{isShieldedMode ? '11.5' : '10'} SB)
+              {blocksMinedSession} Blocks (+10 SB Miner / +0.8 SB Vested Dev)
             </div>
           </div>
         </div>
@@ -478,7 +556,7 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div className="text-xs font-mono font-bold text-[#00f3ff] uppercase flex items-center gap-2">
               <Activity size={14} className={isMining ? 'animate-pulse text-[#00ff41]' : 'text-[#00f3ff]'} />
-              Continuous Auto-Miner Hash Inspector (Round #{roundRef.current})
+              Post-Quantum PoW Hash Inspector (Round #{roundRef.current} • {hashAlgorithm})
             </div>
 
             <div className="flex flex-wrap items-center gap-3 text-xs font-mono">
@@ -497,9 +575,9 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
                 onChange={(e) => handleDifficultyChange(e.target.value as 'fast' | 'standard' | 'hard')}
                 className="bg-black/80 border border-gray-700 text-[#00ff41] px-2.5 py-1 rounded text-xs font-mono outline-none cursor-pointer"
               >
-                <option value="fast">⚡ 21-Bit Balanced (~2.1M hashes / 3–8s)</option>
-                <option value="standard">🛡️ 24-Bit Standard Beta (~16.7M hashes / default)</option>
-                <option value="hard">🔥 26-Bit High Diff (~67.1M hashes / 1–3m)</option>
+                <option value="fast">⚡ {activePresets.fast.label}</option>
+                <option value="standard">🛡️ {activePresets.standard.label}</option>
+                <option value="hard">🔥 {activePresets.hard.label}</option>
               </select>
             </div>
           </div>
@@ -517,10 +595,13 @@ const Miner: React.FC<MinerProps> = ({ address, account }) => {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-gray-800/80 text-[10px] text-gray-400">
               <span>
-                Auto-Mode: <strong className="text-[#00ff41]">CONTINUOUS (Never stops on block found)</strong>
+                PQ Security: <strong className="text-[#00f3ff]">Hash-Based STARK Proof (Zero ECC Discrete-Log)</strong>
               </span>
               <span>
-                Expected Hashes / Block: <strong className="text-white">{DIFFICULTY_PRESETS[difficultyPreset].avgHashes}</strong>
+                Expected Work / Block: <strong className="text-white">{activePresets[difficultyPreset].avgHashes}</strong>
+              </span>
+              <span>
+                Vested Dev Fee: <strong className="text-yellow-400">8% (5–10% Band → 24m Linear Vesting)</strong>
               </span>
             </div>
           </div>

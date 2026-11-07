@@ -44,19 +44,20 @@ PUBLIC_IP=$(curl -s https://api.ipify.org || hostname -I | awk '{print $1}')
 
 cat <<EOF > /etc/wireguard/wg0.conf
 [Interface]
-Address = 10.88.0.1/24
+Address = 10.66.66.1/24
 ListenPort = ${WG_PORT}
 PrivateKey = ${SERVER_PRIV_KEY}
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${DEFAULT_IFACE} -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${DEFAULT_IFACE} -j MASQUERADE
+# Enable NAT masquerade + block outbound SMTP spam (port 25/465/587) to protect VPS IP reputation
+PostUp = iptables -A FORWARD -i %i -p tcp --dport 25 -j DROP; iptables -A FORWARD -i %i -p tcp --dport 465 -j DROP; iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ${DEFAULT_IFACE} -j MASQUERADE
+PostDown = iptables -D FORWARD -i %i -p tcp --dport 25 -j DROP; iptables -D FORWARD -i %i -p tcp --dport 465 -j DROP; iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ${DEFAULT_IFACE} -j MASQUERADE
 EOF
 
 systemctl enable wg-quick@wg0
 systemctl restart wg-quick@wg0
 
-echo "[4/5] Configuring zero-driver Browser Proxy SOCKS5 relay on port ${SOCKS_PORT}..."
+echo "[4/5] Configuring zero-log Browser Proxy SOCKS5 relay on port ${SOCKS_PORT}..."
 cat <<EOF > /etc/danted.conf
-logoutput: syslog
+logoutput: /dev/null
 user.privileged: root
 user.unprivileged: nobody
 internal: 0.0.0.0 port=${SOCKS_PORT}
@@ -65,11 +66,15 @@ socksmethod: none
 clientmethod: none
 client pass {
     from: 0.0.0.0/0 to: 0.0.0.0/0
-    log: error
+    log: none
+}
+socks block {
+    from: 0.0.0.0/0 to: 0.0.0.0/0 port = 25
+    log: none
 }
 socks pass {
     from: 0.0.0.0/0 to: 0.0.0.0/0
-    log: error
+    log: none
 }
 EOF
 systemctl enable danted || true

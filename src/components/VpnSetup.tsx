@@ -396,32 +396,34 @@ docker run -d --name blakenode-exit \\
               </div>
             </div>
 
-            {/* Step 2: Unlinkable STRK20 Note Billing */}
+            {/* Step 2: v2.0 USD-Priced ($6/mo) or SBLAKE Discounted ($4.80/mo, -20%) Billing */}
             <div className="glass-panel p-6 border border-[#00ff41]/30 space-y-4">
               <div className="flex items-center justify-between border-b border-gray-800 pb-3">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <Shield size={16} className="text-[#00ff41]" />
-                  Step 2: Unlinkable STRK20 Pass Activation
+                  Step 2: BlakeVPN Pass ($6/mo USD or -20% in SBLAKE)
                 </h3>
                 <span className="text-[10px] font-mono text-[#00ff41] bg-[#00ff41]/10 px-2 py-0.5 rounded font-bold">
-                  250 SBLAKE ($5 BETA)
+                  $6 USDC / $4.80 SBLAKE (-20%)
                 </span>
               </div>
 
               <p className="text-xs text-gray-400 leading-relaxed">
-                Spend a <strong className="text-[#00f3ff]">STRK20 Shielded Note</strong> via its cryptographic nullifier so your wallet address is never linked to your WireGuard public key. Protocol automatically routes{' '}
-                <strong className="text-white">60% Ops / 25% Burn / 15% Yield</strong>.
+                Pay <strong className="text-white">$6.00/mo in USDC/STRK</strong> or pay in{' '}
+                <strong className="text-[#00ff41]">SBLAKE for a 20% discount ($4.80/mo equivalent, 30% burned)</strong> via{' '}
+                <strong className="text-[#00f3ff]">STRK20 Shadow Account</strong>. Revenue routes{' '}
+                <strong className="text-white">55% Ops / 30% Stablecoin Node Payouts / 15% Ekubo TWAP Buyback &amp; Burn</strong>.
               </p>
 
               {/* Payment Source Selector */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-gray-400">Select Payment Note / Source:</span>
+                  <span className="text-gray-400">Select Payment Tier &amp; Source:</span>
                   <button
                     onClick={handleSeedMaturedNote}
                     className="text-[11px] text-[#00f3ff] hover:underline flex items-center gap-1 font-bold"
                   >
-                    <Sparkles size={12} /> + Seed 7d Matured Test Note (250 SB)
+                    <Sparkles size={12} /> + Seed Test SBLAKE Note (20% Off Pass)
                   </button>
                 </div>
 
@@ -436,13 +438,16 @@ docker run -d --name blakenode-exit \\
                     const amtFormatted = (BigInt(n.amount) / 10n ** 18n).toString();
                     return (
                       <option key={n.commitment} value={n.commitment} className="bg-[#0a0a0a]">
-                        🔒 STRK20 Note ({amtFormatted} SBLAKE) — {n.commitment.slice(0, 12)}... [
-                        {matured ? '7d+ MATURED ✓' : `${ageDays}d old`}]
+                        🔒 STRK20 Shadow SBLAKE ({amtFormatted} SB — $4.80/mo, 20% Discount) — {n.commitment.slice(0, 10)}... [
+                        {matured ? 'MATURED ✓' : `${ageDays}d old`}]
                       </option>
                     );
                   })}
                   <option value="PUBLIC_BALANCE" className="bg-[#0a0a0a]">
-                    💳 Public Wallet Balance (250 SBLAKE — Transparent)
+                    💳 SBLAKE Public Balance ($4.80/mo equivalent — 20% Discount, 30% Burned)
+                  </option>
+                  <option value="USDC_STABLE" className="bg-[#0a0a0a]">
+                    💵 $6.00 USDC / STRK Stable Plan (55% Ops / 30% Nodes / 15% Ekubo Buyback)
                   </option>
                 </select>
               </div>
