@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>BlakeVPN Extension</title>
+  <title>BlakeVPN v2.1 Extension</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      width: 320px;
+      width: 340px;
       background: #060606;
       color: #f3f4f6;
       font-family: 'Courier New', monospace;
-      padding: 16px;
+      padding: 15px;
       border: 1px solid #1f2937;
     }
     .header {
@@ -19,7 +19,7 @@
       justify-content: space-between;
       border-bottom: 1px solid #1f2937;
       padding-bottom: 10px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
     }
     .brand {
       font-weight: 900;
@@ -38,11 +38,11 @@
       font-weight: bold;
     }
     .status-box {
-      padding: 12px;
+      padding: 10px;
       border-radius: 4px;
       background: #0d0d0d;
       border: 1px solid #1f2937;
-      margin-bottom: 12px;
+      margin-bottom: 11px;
       text-align: center;
     }
     .status-indicator {
@@ -55,6 +55,11 @@
       color: #9ca3af;
       word-break: break-all;
     }
+    .ticket-meta {
+      margin-top: 4px;
+      font-size: 9px;
+      color: #00f3ff;
+    }
     label {
       display: block;
       font-size: 10px;
@@ -62,32 +67,49 @@
       margin-bottom: 4px;
       text-transform: uppercase;
     }
-    select, input {
+    select, input[type="text"] {
       width: 100%;
       background: #111;
       border: 1px solid #374151;
       color: #fff;
-      padding: 7px 8px;
+      padding: 6px 8px;
       font-family: inherit;
       font-size: 11px;
       border-radius: 3px;
-      margin-bottom: 10px;
+      margin-bottom: 9px;
       outline: none;
     }
-    select:focus, input:focus {
+    select:focus, input[type="text"]:focus {
       border-color: #00f3ff;
+    }
+    .shield-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 8px;
+      background: rgba(0, 243, 255, 0.06);
+      border: 1px solid rgba(0, 243, 255, 0.25);
+      border-radius: 3px;
+      margin-bottom: 9px;
+      font-size: 10px;
+      color: #e5e7eb;
+    }
+    .shield-row input[type="checkbox"] {
+      accent-color: #00f3ff;
+      cursor: pointer;
     }
     button.connect-btn {
       width: 100%;
-      padding: 10px;
+      padding: 9px;
       font-family: inherit;
       font-weight: 900;
-      font-size: 12px;
+      font-size: 11px;
       text-transform: uppercase;
       border: none;
       border-radius: 3px;
       cursor: pointer;
       transition: all 0.15s ease;
+      margin-bottom: 7px;
     }
     .btn-disconnected {
       background: #00ff41;
@@ -99,8 +121,25 @@
       color: #fff;
       box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
     }
+    button.secondary-btn {
+      width: 100%;
+      padding: 7px;
+      font-family: inherit;
+      font-weight: bold;
+      font-size: 10px;
+      text-transform: uppercase;
+      border: 1px solid #374151;
+      border-radius: 3px;
+      background: #111827;
+      color: #00f3ff;
+      cursor: pointer;
+    }
+    button.secondary-btn:hover {
+      border-color: #00f3ff;
+      background: #1f2937;
+    }
     .footer {
-      margin-top: 12px;
+      margin-top: 10px;
       padding-top: 8px;
       border-top: 1px solid #1f2937;
       font-size: 9px;
@@ -113,15 +152,23 @@
 <body>
   <div class="header">
     <div class="brand">BLAKE<span>VPN</span> PROXY</div>
-    <span class="badge">STRK20 ALPHA</span>
+    <span class="badge">v2.1 PQ + ECDSA</span>
   </div>
 
   <div class="status-box">
     <div id="statusText" class="status-indicator" style="color: #9ca3af;">DISCONNECTED</div>
-    <div id="sessionTokenText" class="status-sub">Unlinkable Nullifier Session Ready</div>
+    <div id="sessionTokenText" class="status-sub">Unlinkable ECDSA Ticket Ready</div>
+    <div id="handshakeText" class="ticket-meta">POSEIDON("BLAKEVPN_TICKET_V2") Ready</div>
   </div>
 
   <div>
+    <label for="planSelect">v2.1 Pass Tier (20% SBLAKE Discount)</label>
+    <select id="planSelect">
+      <option value="MONTHLY_6">Standard — $4.80/mo in SBLAKE ($6 Fiat)</option>
+      <option value="ANNUAL_48">Annual Saver — $38.40/yr in SBLAKE ($48 Fiat)</option>
+      <option value="PRO_RPC_19">Pro Starknet RPC Shield — $15.20/mo SB ($19)</option>
+    </select>
+
     <label for="regionSelect">Select Bonded BlakeNode Relay</label>
     <select id="regionSelect">
       <option value="EU-WEST-1">EU-West (Frankfurt) — 24ms</option>
@@ -129,17 +176,26 @@
       <option value="AP-SE-1">Asia-Pacific (Singapore) — 41ms</option>
     </select>
 
-    <label for="customHost">Custom VPS Node (IP:Port — Optional)</label>
-    <input id="customHost" type="text" placeholder="e.g. 203.0.113.55:1080" />
+    <div class="shield-row">
+      <span>Private Starknet RPC Shield (Zero IP Leak)</span>
+      <input id="rpcShieldToggle" type="checkbox" checked />
+    </div>
+
+    <label for="customHost">Custom Node / Daemon (IP:Port — Optional)</label>
+    <input id="customHost" type="text" placeholder="e.g. 127.0.0.1:8088 or 203.0.113.55:1080" />
 
     <button id="toggleBtn" class="connect-btn btn-disconnected">
       ACTIVATE UNLINKABLE PROXY
     </button>
+
+    <button id="handshakeBtn" class="secondary-btn">
+      ROTATE ECDSA TICKET &amp; HANDSHAKE NODE
+    </button>
   </div>
 
   <div class="footer">
-    <span>60% Ops / 25% Burn / 15% Yield</span>
-    <span>Starknet Sepolia</span>
+    <span>50% SB Burn | 70/20/10 Split</span>
+    <span>Starknet v2.1 PQ</span>
   </div>
 
   <script src="popup.js"></script>
