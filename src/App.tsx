@@ -106,9 +106,9 @@ const App: React.FC = () => {
         Array.from(crypto.getRandomValues(new Uint8Array(16)))
           .map((b) => b.toString(16).padStart(2, '0'))
           .join('');
-      const res = await purchaseVpnPass(activeAcc, 250, sessionPubkey);
+      const res = await purchaseVpnPass(activeAcc, 240, sessionPubkey);
       setBetaStatusMsg(
-        `VPN Pass Activated! 60% Ops / 25% Burn / 15% Yield routed. Tx: ${res.transaction_hash.slice(0, 10)}...`
+        `VPN Pass Activated (v2.1)! 20% SBLAKE Discount applied — 50% SBLAKE Burned + 70% Ops / 20% Yield / 10% TWAP Burn. Tx: ${res.transaction_hash.slice(0, 10)}...`
       );
       getProtocolMetrics().then(setMetrics).catch(() => null);
     } catch (err: any) {
@@ -261,7 +261,7 @@ const App: React.FC = () => {
               STARK<span className="text-[#00ff41]">BLAKE</span>
             </span>
             <span className="text-[9px] font-mono text-[#00f3ff] tracking-widest uppercase">
-              INVITED BETA v1.1
+              PUBLIC ALPHA &amp; BETA v2.1 PQ
             </span>
           </div>
         </button>
@@ -401,7 +401,7 @@ const App: React.FC = () => {
                   BROWSER <span className="text-[#00ff41]">MINING CLIENT</span>
                 </h1>
                 <p className="text-gray-400 text-xs md:text-sm max-w-xl">
-                  Direct Web Worker BLAKE2s hashing without Chrome MV3 extension throttling. Lock rewards in STRK20 (&ge;7 days) for +15% SBLAKE and 50% Mint Fee discount.
+                  Dual-engine Post-Quantum <code className="text-[#00ff41]">POSEIDON_PQ</code> + <code className="text-[#00f3ff]">BLAKE2S_PQ</code> Web Worker mining with 5–10% Vested Dev Fee (6m cliff + 24m linear). Lock rewards in STRK20 (&ge;7 days) for +15% SBLAKE and 50% Mint Fee discount.
                 </p>
               </header>
 
@@ -456,13 +456,14 @@ const App: React.FC = () => {
                     ERA 1 SCHEDULE
                   </h3>
                   <span className="text-[10px] bg-[#00ff41]/10 text-[#00ff41] px-2 py-0.5 rounded font-mono font-bold">
-                    DRAFT 1.1
+                    v2.1 PQ-READY
                   </span>
                 </div>
 
                 <div className="space-y-3">
                   <StatItem label="Era 1 Base Reward" value="10 SBLAKE" />
                   <StatItem label="Shielded Reward (+15%)" value="11.5 SBLAKE" />
+                  <StatItem label="Vested Dev Fee" value="5–10% (6m Cliff + 24m)" />
                   <StatItem label="Halving Interval" value="900,000 Mints" />
                   <StatItem label="Year-1 Target Float" value="<= 40–45%" />
                 </div>
@@ -513,8 +514,8 @@ const App: React.FC = () => {
                     label="Active Beta Nodes"
                     value={`${metrics?.activeNodesCount ?? 18} / 25 Target`}
                   />
-                  <StatItem label="VPN Pass Billing" value="$5/mo (250 SBLAKE)" />
-                  <StatItem label="Revenue Split" value="60% Ops / 25% Burn / 15% Yield" />
+                  <StatItem label="VPN Pass Billing" value="$4.80/mo in SBLAKE ($6 Fiat)" />
+                  <StatItem label="Revenue & Burn" value="50% SB Burn | 70/20/10 Split" />
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 pt-1">
@@ -536,7 +537,7 @@ const App: React.FC = () => {
                     ) : (
                       <Server size={13} className="text-[#00f3ff]" />
                     )}
-                    Quick Test 250 SB VPN Pass Tx
+                    Quick Test 240 SB ($4.80) VPN Pass Tx
                   </button>
 
                   <button
@@ -590,15 +591,15 @@ const App: React.FC = () => {
           </div>
           <div>
             <div className="text-gray-400 mb-2">Mining Engine</div>
-            <div className="text-[#00ff41]">Browser PC Web Workers (BLAKE2s)</div>
+            <div className="text-[#00ff41]">PQ Poseidon (STARK) + BLAKE2s Workers</div>
           </div>
           <div>
             <div className="text-gray-400 mb-2">Privacy &amp; VPN Stack</div>
-            <div className="text-[#00f3ff]">STRK20 + WireGuard / PAC Proxy</div>
+            <div className="text-[#00f3ff]">STRK20 + WireGuard / Private RPC Shield</div>
           </div>
           <div>
             <div className="text-gray-400 mb-2">Phase Status</div>
-            <div className="text-purple-400">Invited Beta (Draft 1.1)</div>
+            <div className="text-purple-400">v2.1 PQ + dVPN (50% Burn | 70/20/10)</div>
           </div>
         </div>
       </footer>

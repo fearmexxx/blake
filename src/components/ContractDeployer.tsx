@@ -20,7 +20,10 @@ import {
   provider, 
   CONTRACT_ADDRESS, 
   bindAccountToCustomProvider,
-  upgradeContract
+  upgradeContract,
+  V2_MODULAR_CONTRACTS,
+  getModularContractAddresses,
+  setModularContractAddress
 } from '../utils/starknet';
 import { 
   RELAYER_CONFIG, 
@@ -64,6 +67,20 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
   const [contractOwner, setContractOwner] = useState<string | null>(null);
   const [newHalvingInterval, setNewHalvingInterval] = useState<string>('');
   const [isUpdatingInterval, setIsUpdatingInterval] = useState(false);
+
+  // v2.1 Modular Contract Suite Registry state
+  const [showModularSuite, setShowModularSuite] = useState<boolean>(false);
+  const [moduleAddresses, setModuleAddresses] = useState<Record<string, string>>(() =>
+    getModularContractAddresses()
+  );
+  const [savedModuleKey, setSavedModuleKey] = useState<string | null>(null);
+
+  const handleSaveModuleAddress = (key: string, val: string) => {
+    setModularContractAddress(key, val);
+    setModuleAddresses(getModularContractAddresses());
+    setSavedModuleKey(key);
+    setTimeout(() => setSavedModuleKey(null), 2000);
+  };
 
   // Check if class is declared on mount
   useEffect(() => {
@@ -562,6 +579,73 @@ export const ContractDeployer: React.FC<ContractDeployerProps> = ({ account, wal
           </div>
         </div>
       )}
+
+      {/* v2.1 Modular Cairo Contract Suite Registry (7 Modules) */}
+      <div className="pt-3 border-t border-gray-800/80">
+        <button
+          onClick={() => setShowModularSuite(!showModularSuite)}
+          className="w-full py-2 px-3 bg-[#00f3ff]/5 hover:bg-[#00f3ff]/10 border border-[#00f3ff]/25 rounded-sm flex items-center justify-between text-xs font-mono text-[#00f3ff] transition-colors"
+        >
+          <span className="flex items-center gap-2 font-bold">
+            <ShieldCheck size={14} />
+            v2.1 Modular Cairo Contract Suite Registry (7 Modules)
+          </span>
+          {showModularSuite ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+
+        {showModularSuite && (
+          <div className="mt-2 bg-black/70 border border-gray-800 p-4 rounded space-y-3 text-xs">
+            <p className="text-[11px] text-gray-400">
+              Inspect and configure deployed Starknet Sepolia addresses for the 7 modular Cairo v2.1 contracts in <code className="text-[#00ff41]">contracts/src/</code>:
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {V2_MODULAR_CONTRACTS.map((mod) => (
+                <div
+                  key={mod.key}
+                  className="p-3 bg-black/80 border border-gray-800/90 rounded space-y-1.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-white text-xs">
+                      {mod.name}
+                    </span>
+                    <span className="text-[10px] font-mono text-[#00ff41] bg-[#00ff41]/10 px-1.5 py-0.5 rounded">
+                      {mod.sourceFile.replace('contracts/src/', '')}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-400">{mod.role}</div>
+                  <div className="flex gap-1.5 pt-1">
+                    <input
+                      type="text"
+                      value={moduleAddresses[mod.key] || ''}
+                      onChange={(e) =>
+                        setModuleAddresses((prev) => ({
+                          ...prev,
+                          [mod.key]: e.target.value,
+                        }))
+                      }
+                      className="bg-black border border-gray-800 text-[11px] px-2 py-1 rounded-sm font-mono w-full text-gray-300 outline-none focus:border-[#00f3ff]"
+                    />
+                    <button
+                      onClick={() =>
+                        handleSaveModuleAddress(mod.key, moduleAddresses[mod.key] || '')
+                      }
+                      className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-[11px] font-mono font-bold text-white rounded-sm shrink-0 flex items-center gap-1"
+                    >
+                      {savedModuleKey === mod.key ? (
+                        <>
+                          <Check size={12} className="text-[#00ff41]" /> Saved
+                        </>
+                      ) : (
+                        'Save'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -45,28 +45,30 @@ export const BetaHomepage: React.FC<BetaHomepageProps> = ({
         <div className="flex flex-wrap items-center gap-2 mb-4">
           <span className="px-2.5 py-1 rounded text-[11px] font-mono font-bold bg-[#00ff41]/15 text-[#00ff41] border border-[#00ff41]/30 flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#00ff41] animate-pulse" />
-            PUBLIC ALPHA &amp; INVITED BETA LIVE (DRAFT 1.1)
+            PUBLIC ALPHA &amp; INVITED BETA LIVE (v2.1 PQ-READY)
           </span>
           <span className="px-2.5 py-1 rounded text-[11px] font-mono font-bold bg-[#00f3ff]/10 text-[#00f3ff] border border-[#00f3ff]/30">
-            STRK20 PRIVACY POOL
+            POSEIDON_PQ + BLAKE2S_PQ DUAL ENGINE
           </span>
           <span className="px-2.5 py-1 rounded text-[11px] font-mono font-bold bg-purple-500/10 text-purple-300 border border-purple-500/30">
-            1-CLICK VPS NODE &amp; CHROME EXTENSION READY
+            50% SBLAKE BURN | 320-SUB FAST BREAKEVEN
           </span>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           <div className="lg:col-span-7 space-y-5">
             <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none text-white">
-              PRIVACY-FIRST <span className="text-[#00ff41]">BROWSER MINING</span> &amp;{' '}
+              POST-QUANTUM <span className="text-[#00ff41]">BROWSER MINING</span> &amp;{' '}
               <span className="text-[#00f3ff]">UNLINKABLE dVPN</span>
             </h1>
             <p className="text-gray-300 text-sm md:text-base leading-relaxed max-w-2xl">
-              Mine <strong className="text-white">SBLAKE</strong> directly in your PC or mobile browser using multi-core BLAKE2s Web Workers. Lock rewards in the{' '}
+              Mine <strong className="text-white">SBLAKE</strong> directly in your PC or mobile browser using our STARK-native{' '}
+              <strong className="text-[#00ff41]">POSEIDON_PQ + BLAKE2S_PQ</strong> dual engine (with a{' '}
+              <strong className="text-purple-300">5–10% vested dev fee</strong> on emission). Lock rewards in the{' '}
               <strong className="text-[#00f3ff]">STRK20 Dark Pool (&ge;7 days)</strong> for a{' '}
-              <strong className="text-[#00ff41]">+15% emission boost</strong> and{' '}
-              <strong className="text-[#00ff41]">50% Mint Fee discount</strong>, or spend shielded notes to activate unlinkable{' '}
-              <strong className="text-white">BlakeVPN WireGuard &amp; Browser Proxy</strong> sessions.
+              <strong className="text-[#00ff41]">+15% emission boost</strong>, or get a{' '}
+              <strong className="text-[#00ff41]">20% SBLAKE discount</strong> on unlinkable{' '}
+              <strong className="text-white">BlakeVPN ($4.80/mo in SBLAKE)</strong> with <strong className="text-red-400">50% direct SBLAKE burn</strong>.
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -129,7 +131,7 @@ export const BetaHomepage: React.FC<BetaHomepageProps> = ({
             <div className="flex items-center justify-between border-b border-gray-800 pb-3">
               <span className="text-xs font-mono font-bold text-white uppercase flex items-center gap-2">
                 <Zap size={15} className="text-[#00ff41]" />
-                Draft 1.1 Protocol Baseline
+                v2.1 Modular Protocol Baseline
               </span>
               <span className="text-[10px] font-mono bg-[#00ff41]/10 text-[#00ff41] px-2 py-0.5 rounded font-bold">
                 ERA {timeline.era} LIVE
@@ -140,7 +142,7 @@ export const BetaHomepage: React.FC<BetaHomepageProps> = ({
               <div className="p-3 bg-white/[0.02] border border-gray-800/80 rounded">
                 <div className="text-[10px] text-gray-500">ERA 1 MINT REWARD</div>
                 <div className="text-base font-black text-white mt-0.5">10 SBLAKE</div>
-                <div className="text-[10px] text-[#00f3ff]">11.5 SBLAKE Shielded (+15%)</div>
+                <div className="text-[10px] text-[#00f3ff]">11.5 SB Shielded | 5–10% Vested Dev</div>
               </div>
               <div className="p-3 bg-white/[0.02] border border-gray-800/80 rounded">
                 <div className="text-[10px] text-gray-500">HALVING INTERVAL</div>
@@ -153,9 +155,9 @@ export const BetaHomepage: React.FC<BetaHomepageProps> = ({
                 <div className="text-[10px] text-[#00ff41]">50% Off w/ &ge;7d STRK20 Lock</div>
               </div>
               <div className="p-3 bg-white/[0.02] border border-gray-800/80 rounded">
-                <div className="text-[10px] text-gray-500">REVENUE ROUTING</div>
-                <div className="text-base font-black text-white mt-0.5">60 / 25 / 15%</div>
-                <div className="text-[10px] text-gray-400">$5k/mo Ops Floor + TWAP Burn</div>
+                <div className="text-[10px] text-gray-500">REVENUE &amp; BURN ROUTER</div>
+                <div className="text-base font-black text-white mt-0.5">70 / 20 / 10%</div>
+                <div className="text-[10px] text-red-400">50% Direct SB Burn | 320-Sub Floor</div>
               </div>
             </div>
           </div>
@@ -271,7 +273,7 @@ export const BetaHomepage: React.FC<BetaHomepageProps> = ({
             </div>
             <div className="p-2.5 bg-black/60 border border-gray-800/80 rounded">
               <div className="text-gray-500">BETA PASS RATE</div>
-              <div className="text-[#00ff41] font-bold mt-0.5">$5/mo (250 SB)</div>
+              <div className="text-[#00ff41] font-bold mt-0.5">$4.80 SB ($6)</div>
             </div>
           </div>
 
@@ -351,7 +353,7 @@ export const BetaHomepage: React.FC<BetaHomepageProps> = ({
             </p>
             <div className="pt-1 flex items-center gap-1.5 text-[11px] font-mono text-gray-300">
               <CheckCircle2 size={13} className="text-purple-400" />
-              60% Ops / 25% Burn / 15% Yield on every pass
+              50% SBLAKE Burn + 70% Ops / 20% Yield / 10% TWAP Burn
             </div>
           </div>
         </div>

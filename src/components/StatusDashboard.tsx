@@ -43,11 +43,15 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ account, walle
     isBetaPhase: true,
     activeNodesCount: 18,
     totalNodeCollateral: '180000',
-    totalBurned: '0',
+    totalBurned: '14200',
     vpnSessionsCount: 64,
-    opsSharePct: 60,
-    buybackBurnPct: 25,
-    yieldSharePct: 15,
+    opsSharePct: 70,
+    buybackBurnPct: 10,
+    yieldSharePct: 20,
+    sblakeDirectBurnPct: 50,
+    devVestingFeeBps: 750,
+    sblakeDiscountPct: 20,
+    breakevenSubscribers: 320,
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [localNotesCount, setLocalNotesCount] = useState(0);
@@ -86,7 +90,7 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ account, walle
             </h1>
           </div>
           <p className="text-xs md:text-sm text-gray-400 mt-1">
-            Live Starknet Sepolia telemetry, Era 1 halving progress, Year-1 free-float lock audit, and $5,000/mo Operations Floor tracking.
+            Live Starknet Sepolia telemetry, v2.1 Modular Cairo Suite, 5–10% Vested Dev Fee (6m cliff + 24m linear), and 320-Subscriber Fast Breakeven ($1,520/mo 15-Node Floor).
           </p>
         </div>
 
@@ -159,7 +163,7 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ account, walle
             {localNotesCount} Local STRK20 Notes Ready
           </div>
           <div className="text-[10px] font-mono text-gray-500 pt-1 border-t border-gray-800/80">
-            $5/mo Beta Pass (250 SBLAKE via Nullifier)
+            $4.80/mo in SBLAKE (20% Off $6) | Pro RPC $19/mo
           </div>
         </div>
 
@@ -169,13 +173,13 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ account, walle
             <Flame size={15} className="text-red-400" />
           </div>
           <div className="text-2xl font-black text-white font-mono">
-            {metrics.opsSharePct} / {metrics.buybackBurnPct} / {metrics.yieldSharePct}%
+            {metrics.opsSharePct} / {metrics.yieldSharePct} / {metrics.buybackBurnPct}%
           </div>
           <div className="text-[11px] font-mono text-red-400">
-            {Number(metrics.totalBurned).toLocaleString()} SBLAKE Burned On-Chain
+            {Number(metrics.totalBurned).toLocaleString()} SBLAKE Burned ({metrics.sblakeDirectBurnPct ?? 50}% Pass Burn)
           </div>
           <div className="text-[10px] font-mono text-gray-500 pt-1 border-t border-gray-800/80">
-            Ops / Ekubo TWAP Burn / Shielded Yield
+            50% Direct SB Burn | 70% Ops / 20% Yield / 10% TWAP
           </div>
         </div>
       </div>
@@ -241,45 +245,45 @@ export const StatusDashboard: React.FC<StatusDashboardProps> = ({ account, walle
           </div>
         </div>
 
-        {/* $5,000/mo Operations Cost Floor & Revenue Taper Governance */}
+        {/* 320-Subscriber Fast Breakeven & Revenue Taper Governance */}
         <div className="glass-panel p-6 border border-gray-800 space-y-4">
           <div className="flex items-center justify-between border-b border-gray-800 pb-3">
             <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
               <DollarSign size={16} className="text-[#00ff41]" />
-              $5,000/mo Operations Floor &amp; Taper Governance
+              320-Subscriber Fast Breakeven &amp; Dual Burn Engine
             </h3>
             <span className="text-[11px] font-mono text-[#00f3ff] font-bold">
-              60 / 25 / 15 SPLIT
+              50% SB BURN | 70/20/10
             </span>
           </div>
 
           <p className="text-xs text-gray-400 leading-relaxed">
-            Protocol fees (`0.5–1.0 STRK` mint fee, `$5–$10/mo` BlakeVPN passes, and `$0.12` STRK20 action fees) prioritize covering the <strong className="text-white">$5,000/mo Operations Cost Floor</strong> before tapering into accelerated Ekubo TWAP buyback &amp; burns:
+            v2.1 3-Tier BlakeVPN passes (`$6/mo` Standard, `$48/yr` Annual, `$19/mo` Pro Private Starknet RPC with <strong className="text-[#00ff41]">20% SBLAKE discount</strong>) reach full infrastructure self-sustainability at just <strong className="text-white">320 active subscribers ($1,520/mo)</strong>:
           </p>
 
           <div className="space-y-2.5 text-xs">
             <div className="p-3 bg-black/60 border border-gray-800 rounded flex items-center justify-between">
               <div>
-                <div className="font-bold text-white">Core Exit &amp; Residential Relay Nodes (15–20 Nodes)</div>
-                <div className="text-[11px] text-gray-400">Multi-region EU, US, and Asia high-bandwidth WireGuard endpoints</div>
+                <div className="font-bold text-white">Phase 1 Fast Breakeven (15-Node WireGuard + RPC Fleet)</div>
+                <div className="text-[11px] text-gray-400">Covered by 320 subscribers (blended $7.10 ARPU) + STRK mint fees</div>
               </div>
-              <span className="font-mono text-[#00ff41] font-bold shrink-0">$3,000–$4,000/mo</span>
+              <span className="font-mono text-[#00ff41] font-bold shrink-0">$1,520/mo Floor</span>
             </div>
 
             <div className="p-3 bg-black/60 border border-gray-800 rounded flex items-center justify-between">
               <div>
-                <div className="font-bold text-white">Lean Community Growth &amp; Beta Incentives</div>
-                <div className="text-[11px] text-gray-400">Targeted node runner &amp; tester onboarding campaigns</div>
+                <div className="font-bold text-white">5–10% Vested Dev Emission Fee (LinearVestingWithCliff)</div>
+                <div className="text-[11px] text-gray-400">6-month cliff + 24-month linear release; zero Day-1 liquid team supply</div>
               </div>
-              <span className="font-mono text-[#00f3ff] font-bold shrink-0">$1,000–$1,500/mo</span>
+              <span className="font-mono text-[#00f3ff] font-bold shrink-0">7.5% Default (500–1000 bps)</span>
             </div>
 
             <div className="p-3 bg-black/60 border border-gray-800 rounded flex items-center justify-between">
               <div>
-                <div className="font-bold text-white">Starknet Relayer, RPC &amp; Security Contingency</div>
-                <div className="text-[11px] text-gray-400">Alchemy v0.10 failover pool &amp; automated proof verification</div>
+                <div className="font-bold text-white">Phase 2 Scale Target (50-Node Multi-Region Fleet)</div>
+                <div className="text-[11px] text-gray-400">50% of SBLAKE pass payments burned immediately; 10% fiat TWAP burn</div>
               </div>
-              <span className="font-mono text-purple-300 font-bold shrink-0">$500–$1,000/mo</span>
+              <span className="font-mono text-purple-300 font-bold shrink-0">$5,000/mo Scale</span>
             </div>
           </div>
 

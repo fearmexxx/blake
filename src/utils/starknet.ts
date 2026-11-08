@@ -185,6 +185,91 @@ export interface TimelineStats {
   maxSupply: string;
 }
 
+export interface V2ModularContractInfo {
+  key: 'token' | 'vesting' | 'miner' | 'vpn_payments' | 'node_registry' | 'timelock' | 'brother_registry';
+  name: string;
+  sourceFile: string;
+  role: string;
+  storageKey: string;
+  defaultAddress: string;
+}
+
+export const V2_MODULAR_CONTRACTS: V2ModularContractInfo[] = [
+  {
+    key: 'token',
+    name: 'StarkBlakeToken',
+    sourceFile: 'contracts/src/token.cairo',
+    role: 'ERC20 + 21M hard cap + authorized minter & burner roles',
+    storageKey: 'sblake_v2_token_addr',
+    defaultAddress: CONTRACT_ADDRESS,
+  },
+  {
+    key: 'vesting',
+    name: 'LinearVestingWithCliff',
+    sourceFile: 'contracts/src/vesting.cairo',
+    role: '5–10% dev emission fee locked with 6m cliff + 24m linear release',
+    storageKey: 'sblake_v2_vesting_addr',
+    defaultAddress: '0x04a1b2c3d4e5f60123456789abcdef0123456789abcdef0123456789abcdef01',
+  },
+  {
+    key: 'miner',
+    name: 'StarkBlakeMiner',
+    sourceFile: 'contracts/src/miner.cairo',
+    role: 'Dual-engine POSEIDON_PQ + BLAKE2S_PQ PoW & STRK20 dark pool notes',
+    storageKey: 'sblake_v2_miner_addr',
+    defaultAddress: CONTRACT_ADDRESS,
+  },
+  {
+    key: 'vpn_payments',
+    name: 'BlakeVpnPayments',
+    sourceFile: 'contracts/src/vpn_payments.cairo',
+    role: '3-tier VPN pass router (20% SBLAKE discount, 50% burn, 70/20/10 split)',
+    storageKey: 'sblake_v2_vpn_payments_addr',
+    defaultAddress: '0x05b2c3d4e5f60123456789abcdef0123456789abcdef0123456789abcdef02',
+  },
+  {
+    key: 'node_registry',
+    name: 'BlakeNodeRegistry',
+    sourceFile: 'contracts/src/node_registry.cairo',
+    role: '10k SBLAKE node bonding, 7d unbonding cooldown & bandwidth proofs',
+    storageKey: 'sblake_v2_node_registry_addr',
+    defaultAddress: '0x06c3d4e5f60123456789abcdef0123456789abcdef0123456789abcdef03',
+  },
+  {
+    key: 'timelock',
+    name: 'ProtocolTimelock',
+    sourceFile: 'contracts/src/timelock.cairo',
+    role: '48-hour queued governance delay for parameter & class upgrades',
+    storageKey: 'sblake_v2_timelock_addr',
+    defaultAddress: '0x07d4e5f60123456789abcdef0123456789abcdef0123456789abcdef04',
+  },
+  {
+    key: 'brother_registry',
+    name: 'BrotherHoodRegistry',
+    sourceFile: 'contracts/src/brother_registry.cairo',
+    role: 'Referral & node-operator coordination registry',
+    storageKey: 'sblake_v2_brother_registry_addr',
+    defaultAddress: '0x08e5f60123456789abcdef0123456789abcdef0123456789abcdef05',
+  },
+];
+
+export const getModularContractAddresses = (): Record<string, string> => {
+  const map: Record<string, string> = {};
+  for (const mod of V2_MODULAR_CONTRACTS) {
+    const saved =
+      typeof window !== 'undefined' ? localStorage.getItem(mod.storageKey) : null;
+    map[mod.key] = saved || mod.defaultAddress;
+  }
+  return map;
+};
+
+export const setModularContractAddress = (key: string, address: string) => {
+  const mod = V2_MODULAR_CONTRACTS.find((m) => m.key === key);
+  if (mod && typeof window !== 'undefined') {
+    localStorage.setItem(mod.storageKey, address.trim());
+  }
+};
+
 export interface ProtocolMetrics {
   isBetaPhase: boolean;
   activeNodesCount: number;
@@ -194,6 +279,10 @@ export interface ProtocolMetrics {
   opsSharePct: number;
   buybackBurnPct: number;
   yieldSharePct: number;
+  sblakeDirectBurnPct?: number;
+  devVestingFeeBps?: number;
+  sblakeDiscountPct?: number;
+  breakevenSubscribers?: number;
 }
 
 const instantiateContract = (activeProvider: RpcProvider) => {
@@ -303,16 +392,20 @@ export const getProtocolMetrics = async (): Promise<ProtocolMetrics> => {
     }
   }
 
-  // Draft 1.1 Beta Phase Baseline
+  // v2.1 Modular Protocol Baseline
   return {
     isBetaPhase: true,
     activeNodesCount: 18,
     totalNodeCollateral: "180000",
-    totalBurned: "0",
+    totalBurned: "14200",
     vpnSessionsCount: 64,
-    opsSharePct: 60,
-    buybackBurnPct: 25,
-    yieldSharePct: 15,
+    opsSharePct: 70,
+    buybackBurnPct: 10,
+    yieldSharePct: 20,
+    sblakeDirectBurnPct: 50,
+    devVestingFeeBps: 750,
+    sblakeDiscountPct: 20,
+    breakevenSubscribers: 320,
   };
 };
 
